@@ -30,6 +30,7 @@ public class RoadNetworkVis {
     int ScoreFailed=0;
     int RouteScore=0;
     int EdgeScore=0;
+    int MaterialsUsed=0;
 
     //inputs
     int N;      //num cities
@@ -332,7 +333,6 @@ loop:
             }
             
             boolean[] edgeSeen=new boolean[Edges.size()];
-            int materialsUsed=0;
             for (int i : ret)
             {
               if (i<0 || i>=Edges.size())
@@ -348,9 +348,9 @@ loop:
               edgeSeen[i]=true;
               
               Edge e=Edges.get(i);
-              materialsUsed+=e.dist;
+              MaterialsUsed+=e.dist;
             }
-            if (materialsUsed>NumMaterials)
+            if (MaterialsUsed>NumMaterials)
             {
               addFatalError("You used more materials than there is available");
               return -1;                            
@@ -384,6 +384,7 @@ loop:
     static boolean vis;
     static boolean showNumbers;
     static boolean Debug;
+    static boolean json;
     static Process proc;
     InputStream is;
     OutputStream os;
@@ -530,10 +531,41 @@ loop:
                 new ErrorReader(proc.getErrorStream()).start();
             } catch (Exception e) { e.printStackTrace(); }
         }
-        System.out.println("Score = " + runTest(seed));
+        double score = runTest(seed);
+        if (!json) System.out.println("Score = " + score);
         if (proc != null)
             try { proc.destroy(); } 
             catch (Exception e) { e.printStackTrace(); }
+
+        if (json)
+        {
+          System.out.print("{\"NM\":"+NumMaterials);
+          System.out.print(",\"N\":"+N);
+          System.out.print(",\"E\":"+Edges.size());
+          System.out.print(",\"R\":"+NumRoutes);
+          System.out.print(",\"edges\":[");
+          String sep = "";
+          for (Edge r : Edges) {
+            System.out.print(sep+"["+r.a+","+r.b+","+r.dist+","+r.points+"]");
+            sep = ",";
+          }
+          System.out.print("]");
+          System.out.print(",\"routes\":[");
+          sep = "";
+          for (Edge r : Routes) {
+            System.out.print(sep+"["+r.a+","+r.b+","+r.points+"]");
+            sep = ",";
+          }
+          System.out.print("]");
+          System.out.print(",\"score\":"+score);
+          System.out.print(",\"details\":");
+          System.out.print("{\"materialsUsed\":"+MaterialsUsed);
+          System.out.print(",\"routesCompleted\":"+RoutesCompleted);
+          System.out.print(",\"routeScore\":"+RouteScore);
+          System.out.print(",\"edgeScore\":"+EdgeScore);
+          System.out.print("}");
+          System.out.println("}");
+        }
       }
       catch (Exception e) { e.printStackTrace(); }
     }
@@ -585,6 +617,7 @@ loop:
         vis = true;
         showNumbers = false;
         Debug = false;
+        json = false;
         for (int i = 0; i<args.length; i++)
         {   if (args[i].equals("-seed"))
                 seed = args[++i];
@@ -596,6 +629,8 @@ loop:
                 showNumbers = true;                
             if (args[i].equals("-debug"))
                 Debug = true;                                
+            if (args[i].equals("-json"))
+                json = true;
         }
             
         RoadNetworkVis f = new RoadNetworkVis(seed);
