@@ -652,8 +652,8 @@ class ErrorReader extends Thread{
             int read;
             while ((read = error.read(ch)) > 0)
             {   String s = new String(ch,0,read);
-                System.out.print(s);
-                System.out.flush();
+                System.err.print(s);
+                System.err.flush();
             }
         } catch(Exception e) { }
     }
