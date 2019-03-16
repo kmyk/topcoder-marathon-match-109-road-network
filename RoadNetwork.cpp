@@ -31,6 +31,9 @@ struct route_t {
 vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes) {
     vector<int> order(E);
     iota(ALL(order), 0);
+    sort(ALL(order), [&](int i, int j) {
+        return edges[i].p * edges[j].m > edges[j].p * edges[i].m;
+    });
     vector<int> answer;
     ll sum_m = 0;
     for (int i : order) {
