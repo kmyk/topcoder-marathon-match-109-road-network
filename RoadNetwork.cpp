@@ -59,7 +59,7 @@ vector<bool> find_solution(ll NM, int N, int E, vector<connection_t> const & edg
     }
 
     vector<bool> answer(E);
-    ll sum_m = 0;
+    ll answer_sum_m = 0;
     union_find_tree uft(N);
 
     while (true) {
@@ -89,6 +89,9 @@ vector<bool> find_solution(ll NM, int N, int E, vector<connection_t> const & edg
                 }
             }
             assert (sum_m[route.b] != LLONG_MAX);
+            if (answer_sum_m + sum_m[route.b] > NM) {
+                continue;
+            }
 
             // reconstruct path
             vector<int> path;
@@ -106,9 +109,9 @@ vector<bool> find_solution(ll NM, int N, int E, vector<connection_t> const & edg
             }
         }
 
-        if (not selected_path.empty() and sum_m + selected_sum_m <= NM) {
+        if (not selected_path.empty() and answer_sum_m + selected_sum_m <= NM) {
             cerr << "use path:";
-            sum_m += selected_sum_m;
+            answer_sum_m += selected_sum_m;
             assert (not uft.is_same(selected_path.front(), selected_path.back()));
             REP (i, selected_path.size() - 1) {
                 int a = selected_path[i];
@@ -135,9 +138,9 @@ vector<bool> find_solution(ll NM, int N, int E, vector<connection_t> const & edg
         return edges[i].p * edges[j].m > edges[j].p * edges[i].m;
     });
     for (int i : order) {
-        if (not answer[i] and sum_m + edges[i].m <= NM) {
+        if (not answer[i] and answer_sum_m + edges[i].m <= NM) {
             answer[i] = true;
-            sum_m += edges[i].m;
+            answer_sum_m += edges[i].m;
             cerr << "use edge: " << i << endl;
         }
     }
