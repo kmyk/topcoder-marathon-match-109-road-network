@@ -127,6 +127,21 @@ vector<bool> find_solution(ll NM, int N, int E, vector<connection_t> const & edg
             break;
         }
     }
+
+    // use edges greedily, order by P / M
+    vector<int> order(E);
+    iota(ALL(order), 0);
+    sort(ALL(order), [&](int i, int j) {
+        return edges[i].p * edges[j].m > edges[j].p * edges[i].m;
+    });
+    for (int i : order) {
+        if (not answer[i] and sum_m + edges[i].m <= NM) {
+            answer[i] = true;
+            sum_m += edges[i].m;
+            cerr << "use edge: " << i << endl;
+        }
+    }
+
     return answer;
 }
 
