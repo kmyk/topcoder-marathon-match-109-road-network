@@ -1,49 +1,77 @@
 #include <algorithm>
+#include <cassert>
 #include <cstdlib>
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <numeric>
 #include <set>
 #include <sstream>
 #include <string>
 #include <vector>
-
+#define REP(i, n) for (int i = 0; (i) < (int)(n); ++ (i))
+#define REP3(i, m, n) for (int i = (m); (i) < (int)(n); ++ (i))
+#define REP_R(i, n) for (int i = int(n) - 1; (i) >= 0; -- (i))
+#define REP3R(i, m, n) for (int i = int(n) - 1; (i) >= (int)(m); -- (i))
+#define ALL(x) begin(x), end(x)
+using ll = long long;
 using namespace std;
+
+
+struct connection_t {
+    int a, b;
+    ll m, p;
+};
+
+struct route_t {
+    int a, b;
+    ll p;
+};
+
+vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes) {
+    vector<int> order(E);
+    iota(ALL(order), 0);
+    vector<int> answer;
+    ll sum_m = 0;
+    for (int i : order) {
+        if (sum_m + edges[i].m <= NM) {
+            sum_m += edges[i].m;
+            answer.push_back(i);
+        }
+    }
+    return answer;
+}
 
 
 class RoadNetwork {
 public:
     vector<int> findSolution(int NM, int N, int E, vector<string> edges, int R, vector<string> routes) {
-        vector<int> ret;
+        assert (30 <= N and N <= 1000);
+        assert (N - 1 <= E);
+        assert (5 <= R and R <= N / 4);
 
-        // build connections until we run out of materials
-        for (int i = 0; i < E; ++ i) {
-            vector<string> temp = split(edges[i], " ");
-            int cost = atoi(temp[2].c_str());
-
-            if (cost <= NM) {
-                NM -= cost;
-                ret.push_back(i);
-            }
+        vector<connection_t> parsed_edges(E);
+        REP (i, E) {
+            istringstream iss(edges[i]);
+            auto & edge = parsed_edges[i];
+            iss >> edge.a >> edge.b >> edge.m >> edge.p;
+            assert (0 <= edge.a and edge.a < N);
+            assert (0 <= edge.b and edge.b < N);
+            assert (1 <= edge.m);
+            assert (1 <= edge.p);
         }
 
-        return ret;
-    }
-
-    vector<string> split(string const & s, string const & delimiter) {
-        size_t pos_start = 0;
-        size_t pos_end;
-        size_t delim_len = delimiter.length();
-        string token;
-        vector<string> res;
-
-        while ((pos_end = s.find(delimiter, pos_start)) != string::npos) {
-            token = s.substr(pos_start, pos_end - pos_start);
-            pos_start = pos_end + delim_len;
-            res.push_back(token);
+        vector<route_t> parsed_routes(R);
+        REP (i, R) {
+            istringstream iss(routes[i]);
+            auto & route = parsed_routes[i];
+            iss >> route.a >> route.b >> route.p;
+            assert (0 <= route.a and route.a < N);
+            assert (0 <= route.b and route.b < N);
+            assert (1 <= route.p);
         }
 
-        res.push_back(s.substr(pos_start));
-        return res;
+        vector<int> answer = find_solution(NM, N, E, parsed_edges, R, parsed_routes);
+        return answer;
     }
 };
