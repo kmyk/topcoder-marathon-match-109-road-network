@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cassert>
 #include <climits>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <iterator>
@@ -64,27 +65,31 @@ vector<bool> find_solution(ll NM, int N, int E, vector<connection_t> const & edg
 
     while (true) {
         vector<int> selected_path;
+        double selected_value = - INFINITY;
         ll selected_sum_m = LLONG_MAX;
 
         for (auto const & route : routes) if (not uft.is_same(route.a, route.b)) {
             // Dijkstra
             vector<int> parent(N, -1);
+            vector<ll> sum_p(N, LLONG_MIN);
             vector<ll> sum_m(N, LLONG_MAX);
             reversed_priority_queue<pair<ll, int> > que;
+            sum_p[route.a] = 0;
             sum_m[route.a] = 0;
             que.emplace(0, route.a);
             while (not que.empty()) {
-                ll cost_a; int a; tie(cost_a, a) = que.top();
+                ll sum_m_a; int a; tie(sum_m_a, a) = que.top();
                 que.pop();
                 if (a == route.b) break;
-                if (sum_m[a] < cost_a) continue;
+                if (sum_m[a] < sum_m_a) continue;
                 for (int i : edges_of[a]) {
                     int b = (a ^ edges[i].a ^ edges[i].b);
-                    ll cost_b = sum_m[a] + (uft.is_same(a, b) ? 0 : edges[i].m);
-                    if (cost_b < sum_m[b]) {
-                        sum_m[b] = cost_b;
+                    ll sum_m_b = sum_m[a] + (uft.is_same(a, b) ? 0 : edges[i].m);
+                    if (sum_m_b < sum_m[b]) {
+                        sum_m[b] = sum_m_b;
+                        sum_p[b] = sum_p[a] + (uft.is_same(a, b) ? 0 : edges[i].p);
                         parent[b] = a;
-                        que.emplace(cost_b, b);
+                        que.emplace(sum_m_b, b);
                     }
                 }
             }
@@ -103,7 +108,9 @@ vector<bool> find_solution(ll NM, int N, int E, vector<connection_t> const & edg
             assert (path.front() == route.a);
             assert (path.back() == route.b);
 
-            if (sum_m[route.b] < selected_sum_m) {
+            double value = (double)(sum_p[route.b] + route.p) / sum_m[route.b];
+            if (selected_value < value) {
+                selected_value = value;
                 selected_sum_m = sum_m[route.b];
                 selected_path = path;
             }
