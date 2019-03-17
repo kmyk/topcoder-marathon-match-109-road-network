@@ -21,6 +21,9 @@ tester.jar: ${PROBLEM}Vis.class
 
 URL := https://community.topcoder.com/longcontest/?module=ViewProblemStatement&rd=17427&pm=15314
 submit:
-	oj submit '${URL}' --language C++ ${PROBLEM}.cpp -y --open
+	oj submit '${URL}' ${PROBLEM}.cpp -y --open
 submit/full:
-	oj submit '${URL}' --language C++ ${PROBLEM}.cpp -y --open --full
+	oj submit '${URL}' ${PROBLEM}.cpp -y --open --full
+
+standings:
+	oj get-standings '${URL}' | sed 's/^/| / ; s/\t/\t| /g ; s/$$/\t|/' | expand -t24 | sed '1 { p ; s/[^|]/-/g ; }'
