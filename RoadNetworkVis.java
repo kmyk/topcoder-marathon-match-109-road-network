@@ -560,6 +560,13 @@ loop:
             sep = ",";
           }
           System.out.print("]");
+          System.out.print(",\"return\":[");
+          sep = "";
+          for (int ret : Ret) {
+            System.out.print(sep+ret);
+            sep = ",";
+          }
+          System.out.print("]");
           System.out.print(",\"score\":"+score);
           System.out.print(",\"details\":");
           System.out.print("{\"materialsUsed\":"+MaterialsUsed);
