@@ -33,6 +33,7 @@ public class RoadNetworkVis {
     int EdgeScore=0;
     int MaterialsUsed=0;
     long SeedValue;
+    boolean[] isInRouteCompleted;
 
     //inputs
     int N;      //num cities
@@ -277,8 +278,11 @@ loop:
       ScoreCompleted=0;
       RoutesFailed=0;
       ScoreFailed=0;
-      for (Edge r : Routes)
+      isInRouteCompleted = new boolean[NumRoutes];
+      for (int i=0; i<NumRoutes; i++)
       {
+        Edge r = Routes[i];
+        isInRouteCompleted[i] = adj[r.a][r.b];
         if (adj[r.a][r.b])
         {
           RoutesCompleted++;
@@ -292,7 +296,7 @@ loop:
       }
       
       //System.err.println("routes completed "+routesCompleted);
-      return ScoreCompleted-ScoreFailed;
+      return ScoreCompleted;
     }
         
     
@@ -434,18 +438,39 @@ loop:
             double ratioY=1.0/H*Height;
             
             
-            boolean[] isInRoute=new boolean[N];
-            for (Edge r : Routes)
+            boolean[] isInRouteFailed=new boolean[N];
+            for (int i=0; i<NumRoutes; i++)
             {
-              isInRoute[r.a]=true;
-              isInRoute[r.b]=true;
+              Edge r=Routes[i];
+              if (!isInRouteCompleted[i]) {
+                isInRouteFailed[r.a]=true;
+                isInRouteFailed[r.b]=true;
+              }
             }
             
+            boolean[] cityInReturn=new boolean[N];
             boolean[] edgeInReturn=new boolean[Edges.size()];
-            for (int i : Ret) edgeInReturn[i]=true;
+            for (int i : Ret) {
+              Edge r=Edges.get(i);
+              cityInReturn[r.a]=true;
+              cityInReturn[r.b]=true;
+              edgeInReturn[i]=true;
+            }
            
-            //edges
             Graphics2D g2 = (Graphics2D) g.create();
+
+            //routes
+            for (int i=0; i<NumRoutes; i++)
+            {
+              Edge r=Routes[i];
+              if (isInRouteCompleted[i]) g2.setColor(Color.GREEN);
+              else g2.setColor(Color.RED);
+              Stroke dashed = new BasicStroke(1, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[]{1,3}, 0);
+              g2.setStroke(dashed);
+              g2.drawLine((int)(CityX[r.a]*ratioX),(int)(CityY[r.a]*ratioY),(int)(CityX[r.b]*ratioX),(int)(CityY[r.b]*ratioY));
+            }
+
+            //edges
             for (int i=0; i<Edges.size(); i++)
             {
               Edge e=Edges.get(i);
@@ -472,8 +497,9 @@ loop:
             //cities
             for (int i=0; i<N; i++)
             {
-              if (isInRoute[i]) g.setColor(Color.GREEN);
-              else g.setColor(Color.RED);
+              if (isInRouteFailed[i]) g.setColor(Color.RED);
+              else if (cityInReturn[i]) g.setColor(Color.GREEN);
+              else g.setColor(Color.BLUE);
               
               g.fillOval((int)((CityX[i]-CitySize/2)*ratioX),(int)((CityY[i]-CitySize/2)*ratioY),(int)(CitySize*ratioX),(int)(CitySize*ratioY));
               
