@@ -488,7 +488,7 @@ loop:
             //show stats
             g.setColor(Color.BLACK);
             g.setFont(new Font("Arial",Font.BOLD,14));
-            g.drawString(String.format("Routes completed: %d", RoutesCompleted), Width+25, 30);
+            g.drawString(String.format("Routes completed: %d / %d", RoutesCompleted, Routes.length), Width+25, 30);
             //g.drawString(String.format("Routes failed: %d", RoutesFailed), Width+25, 60);
             g.drawString(String.format("Routes score: %d", RouteScore), Width+25, 90);
             g.drawString(String.format("Connections score: %d", EdgeScore), Width+25, 120);
