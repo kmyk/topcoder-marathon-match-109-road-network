@@ -159,6 +159,17 @@ struct solution {
         }
         return make_tuple(size, component_of, vertices_of);
     }
+
+    ll get_raw_score() {
+        auto const & routes = param.routes;
+        ll used_route_sum_p = 0;
+        for (auto const & route : routes) {
+            if (used_uft.is_same(route.a, route.b)) {
+                used_route_sum_p += route.p;
+            }
+        }
+        return used_sum_p * used_route_sum_p;
+    }
 };
 
 tuple<vector<int>, ll, double> find_nice_path_for_route(parameters const & param, route_t const & route, int size, vector<int> const & component_of, vector<vector<int> > const & vertices_of) {
@@ -264,6 +275,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
         }
     }
 
+    cerr << "score: " << sln.get_raw_score() << endl;
     return sln.get_answer();
 }
 
