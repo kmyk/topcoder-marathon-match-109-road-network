@@ -17,6 +17,7 @@ public class RoadNetworkVis {
     
     
     //visuals
+    private static int Height = 800, Width = 1280;
     private static int MinCityDist = 20;
     private static int UnitDist = 50;
     private static int CitySize=10;
@@ -363,7 +364,7 @@ loop:
             Ret=ret;
             
             if (vis) {
-                jf.setSize(W+extraW,H+extraH);
+                jf.setSize(Width+extraW,Height+extraH);
                 jf.setVisible(true);
                 draw();
             }   
@@ -425,9 +426,12 @@ loop:
             
             // background
             g.setColor(new Color(0xDDDDDD));
-            g.fillRect(0,0,W+extraW,H+extraH);
+            g.fillRect(0,0,Width+extraW,Height+extraH);
             g.setColor(Color.WHITE);
-            g.fillRect(0,0,W,H);
+            g.fillRect(0,0,Width,Height);
+
+            double ratioX=1.0/W*Width;
+            double ratioY=1.0/H*Height;
             
             
             boolean[] isInRoute=new boolean[N];
@@ -454,13 +458,13 @@ loop:
               float X=(float)((dist-(e.dist-1)*gap)/e.dist);
               Stroke dashed = new BasicStroke(2, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[]{X,gap}, 0);
               g2.setStroke(dashed);              
-              g2.drawLine(CityX[e.a],CityY[e.a],CityX[e.b],CityY[e.b]);
+              g2.drawLine((int)(CityX[e.a]*ratioX),(int)(CityY[e.a]*ratioY),(int)(CityX[e.b]*ratioX),(int)(CityY[e.b]*ratioY));
 
               if (showNumbers)
               {
                 g.setColor(Color.BLACK);
                 g.setFont(new Font("Arial",Font.PLAIN,10));
-                g.drawString(""+e.points,(CityX[e.a]+CityX[e.b])/2,(CityY[e.a]+CityY[e.b])/2);
+                g.drawString(""+e.points,(int)((CityX[e.a]+CityX[e.b])/2*ratioX),(int)((CityY[e.a]+CityY[e.b])/2*ratioY));
               }
             }            
             g2.dispose();
@@ -471,28 +475,29 @@ loop:
               if (isInRoute[i]) g.setColor(Color.GREEN);
               else g.setColor(Color.RED);
               
-              g.fillOval(CityX[i]-CitySize/2,CityY[i]-CitySize/2,CitySize,CitySize);
+              g.fillOval((int)((CityX[i]-CitySize/2)*ratioX),(int)((CityY[i]-CitySize/2)*ratioY),(int)(CitySize*ratioX),(int)(CitySize*ratioY));
               
               if (showNumbers)
               {
                 g.setColor(Color.RED);
                 g.setFont(new Font("Arial",Font.PLAIN,10));
-                g.drawString(""+i,CityX[i]-CitySize/2,CityY[i]-CitySize/2);
+                g.drawString(""+i,(int)((CityX[i]-CitySize/2)*ratioX),(int)((CityY[i]-CitySize/2)*ratioY));
               }
             }            
             
             //show stats
             g.setColor(Color.BLACK);
             g.setFont(new Font("Arial",Font.BOLD,14));
-            //g.drawString("SCORE",W+25,30);       
-            g.drawString(String.format("Routes completed: %d", RoutesCompleted), W+25, 30);
-            //g.drawString(String.format("Routes failed: %d", RoutesFailed), W+25, 60);
-            g.drawString(String.format("Routes score: %d", RouteScore), W+25, 90);
-            g.drawString(String.format("Connections score: %d", EdgeScore), W+25, 120);
-            g.drawString(String.format("SCORE: %d", RouteScore*1L*EdgeScore), W+25, 150);
+            g.drawString(String.format("Routes completed: %d", RoutesCompleted), Width+25, 30);
+            //g.drawString(String.format("Routes failed: %d", RoutesFailed), Width+25, 60);
+            g.drawString(String.format("Routes score: %d", RouteScore), Width+25, 90);
+            g.drawString(String.format("Connections score: %d", EdgeScore), Width+25, 120);
+            g.drawString(String.format("SCORE: %d", RouteScore*1L*EdgeScore), Width+25, 150);
         }
         // -------------------------------------
-        public Vis() {}
+        public Vis() {
+          jf.addWindowListener(this); 
+        }
         // -------------------------------------
         //WindowListener
         public void windowClosing(WindowEvent e){ 
@@ -641,6 +646,10 @@ loop:
                 Debug = true;                                
             if (args[i].equals("-json"))
                 json = true;
+            if (args[i].equals("-width"))
+                Width = Integer.parseInt(args[++i]);
+            if (args[i].equals("-height"))
+                Height = Integer.parseInt(args[++i]);              
         }
             
         RoadNetworkVis f = new RoadNetworkVis(seed);
