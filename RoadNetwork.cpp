@@ -22,6 +22,15 @@ using namespace std;
 template <class T> using reversed_priority_queue = priority_queue<T, vector<T>, greater<T> >;
 
 
+constexpr double ticks_per_sec = 2800000000;
+constexpr double ticks_per_sec_inv = 1.0 / ticks_per_sec;
+inline double rdtsc() {  // in seconds
+    uint32_t lo, hi;
+    asm volatile ("rdtsc" : "=a" (lo), "=d" (hi));
+    return (((uint64_t)hi << 32) | lo) * ticks_per_sec_inv;
+}
+constexpr int TLE = 10;  // sec
+
 struct union_find_tree {
     vector<int> data;
     union_find_tree() = default;
@@ -100,7 +109,7 @@ struct parameters {
 };
 
 struct solution {
-    const parameters param;
+    const parameters & param;
 
     // the state of solution
     vector<bool> used;
@@ -226,57 +235,84 @@ tuple<vector<int>, ll, double> find_nice_path_for_route(parameters const & param
 }
 
 vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes) {
+    double clock_begin = rdtsc();
     parameters param(NM, N, E, edges, R, routes);
-    solution sln(param);
+    vector<int> answer;
+    ll highscore = LLONG_MIN;
 
-    while (true) {
-        int size; vector<int> component_of; vector<vector<int> > vertices_of;
-        tie(size, component_of, vertices_of) = sln.get_compressed_graph();
-
-        vector<int> selected_path;
-        double selected_value = - INFINITY;
-
-        for (auto const & route : routes) {
-            vector<int> path; ll sum_m; double value;
-            tie(path, sum_m, value) = find_nice_path_for_route(param, route, size, component_of, vertices_of);
-
-            if (sln.used_sum_m + sum_m > NM) {
-                continue;
-            }
-            if (selected_value < value) {
-                selected_value = value;
-                selected_path = path;
-            }
-        }
-
-        if (not selected_path.empty()) {
-            cerr << "use path:";
-            for (int i : selected_path) {
-                cerr << " " << i;
-                assert (not sln.used_uft.is_same(edges[i].a, edges[i].b));
-                sln.use(i);
-            }
-            cerr << endl;
-        } else {
+    for (auto const & initial_route : routes) {
+        if ((rdtsc() - clock_begin) > TLE * 0.9) {
             break;
         }
-    }
 
-    // use edges greedily, order by P / M
-    vector<int> order(E);
-    iota(ALL(order), 0);
-    sort(ALL(order), [&](int i, int j) {
-        return edges[i].p * edges[j].m > edges[j].p * edges[i].m;
-    });
-    for (int i : order) {
-        if (not sln.used[i] and sln.used_sum_m + edges[i].m <= NM) {
-            sln.use(i);
-            cerr << "use edge: " << i << endl;
+        solution sln(param);
+        {
+            int size; vector<int> component_of; vector<vector<int> > vertices_of;
+            tie(size, component_of, vertices_of) = sln.get_compressed_graph();
+
+            vector<int> path; ll sum_m;
+            tie(path, sum_m, ignore) = find_nice_path_for_route(param, initial_route, size, component_of, vertices_of);
+
+            if (sum_m > NM) continue;
+            for (int i : path) {
+                sln.use(i);
+            }
+        }
+
+        while (true) {
+            int size; vector<int> component_of; vector<vector<int> > vertices_of;
+            tie(size, component_of, vertices_of) = sln.get_compressed_graph();
+
+            vector<int> selected_path;
+            double selected_value = - INFINITY;
+
+            for (auto const & route : routes) {
+                vector<int> path; ll sum_m; double value;
+                tie(path, sum_m, value) = find_nice_path_for_route(param, route, size, component_of, vertices_of);
+
+                if (sln.used_sum_m + sum_m > NM) {
+                    continue;
+                }
+                if (selected_value < value) {
+                    selected_value = value;
+                    selected_path = path;
+                }
+            }
+
+            if (not selected_path.empty()) {
+                for (int i : selected_path) {
+                    assert (not sln.used_uft.is_same(edges[i].a, edges[i].b));
+                    sln.use(i);
+                }
+            } else {
+                break;
+            }
+
+
+            auto sln1 = sln;
+
+            // use edges greedily, order by P / M
+            vector<int> order(E);
+            iota(ALL(order), 0);
+            sort(ALL(order), [&](int i, int j) {
+                return edges[i].p * edges[j].m > edges[j].p * edges[i].m;
+            });
+            for (int i : order) {
+                if (not sln1.used[i] and sln1.used_sum_m + edges[i].m <= NM) {
+                    sln1.use(i);
+                }
+            }
+
+            ll score = sln1.get_raw_score();
+            if (highscore < score) {
+                highscore = score;
+                answer = sln1.get_answer();
+            }
         }
     }
 
-    cerr << "score: " << sln.get_raw_score() << endl;
-    return sln.get_answer();
+    cerr << "score: " << highscore << endl;
+    return answer;
 }
 
 
