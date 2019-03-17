@@ -26,4 +26,4 @@ submit/full:
 	oj submit '${URL}' ${PROBLEM}.cpp -y --open --full
 
 standings:
-	oj get-standings '${URL}' | sed 's/^/| / ; s/\t/\t| /g ; s/$$/\t|/' | expand -t24 | sed '1 { p ; s/[^|]/-/g ; }'
+	python3 -c 'import onlinejudge, tabulate ; url = "${URL}" ; problem = onlinejudge.dispatch.problem_from_url(url) ; headers, table = problem.get_standings() ; print(tabulate.tabulate(map(lambda row: row.values(), table), headers=headers, tablefmt="github"))'
