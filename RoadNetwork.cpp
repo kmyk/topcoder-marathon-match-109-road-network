@@ -259,7 +259,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
     ll highscore = LLONG_MIN;
 
     for (auto const & initial_route : routes) {
-        if ((rdtsc() - clock_begin) > TLE * 0.9) {
+        if ((rdtsc() - clock_begin) > TLE * 0.6) {
             break;
         }
 
