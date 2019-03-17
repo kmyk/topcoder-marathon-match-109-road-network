@@ -234,6 +234,24 @@ tuple<vector<int>, ll, double> find_nice_path_for_route(parameters const & param
     return make_tuple(path, sum_m[component_of[route.b]], value);
 }
 
+solution use_edges_greedily_without_routes(solution sln) {
+    auto const & NM = sln.param.NM;
+    auto const & E = sln.param.E;
+    auto const & edges = sln.param.edges;
+
+    vector<int> order(E);
+    iota(ALL(order), 0);
+    sort(ALL(order), [&](int i, int j) {
+        return edges[i].p * edges[j].m > edges[j].p * edges[i].m;
+    });
+    for (int i : order) {
+        if (not sln.used[i] and sln.used_sum_m + edges[i].m <= NM) {
+            sln.use(i);
+        }
+    }
+    return sln;
+}
+
 vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes) {
     double clock_begin = rdtsc();
     parameters param(NM, N, E, edges, R, routes);
@@ -258,6 +276,17 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
                 sln.use(i);
             }
         }
+
+        auto commit = [&]() {
+            auto sln1 = use_edges_greedily_without_routes(sln);
+            ll score = sln1.get_raw_score();
+            if (highscore < score) {
+                highscore = score;
+                answer = sln1.get_answer();
+            }
+        };
+
+        commit();
 
         while (true) {
             int size; vector<int> component_of; vector<vector<int> > vertices_of;
@@ -288,26 +317,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
                 break;
             }
 
-
-            auto sln1 = sln;
-
-            // use edges greedily, order by P / M
-            vector<int> order(E);
-            iota(ALL(order), 0);
-            sort(ALL(order), [&](int i, int j) {
-                return edges[i].p * edges[j].m > edges[j].p * edges[i].m;
-            });
-            for (int i : order) {
-                if (not sln1.used[i] and sln1.used_sum_m + edges[i].m <= NM) {
-                    sln1.use(i);
-                }
-            }
-
-            ll score = sln1.get_raw_score();
-            if (highscore < score) {
-                highscore = score;
-                answer = sln1.get_answer();
-            }
+            commit();
         }
     }
 
