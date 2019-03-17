@@ -8,6 +8,7 @@
 #include <map>
 #include <numeric>
 #include <queue>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string>
@@ -30,6 +31,29 @@ inline double rdtsc() {  // in seconds
     return (((uint64_t)hi << 32) | lo) * ticks_per_sec_inv;
 }
 constexpr int TLE = 10;  // sec
+
+class xor_shift_128 {
+public:
+    typedef uint32_t result_type;
+    xor_shift_128(uint32_t seed = 42) {
+        set_seed(seed);
+    }
+    void set_seed(uint32_t seed) {
+        a = seed = 1812433253u * (seed ^ (seed >> 30));
+        b = seed = 1812433253u * (seed ^ (seed >> 30)) + 1;
+        c = seed = 1812433253u * (seed ^ (seed >> 30)) + 2;
+        d = seed = 1812433253u * (seed ^ (seed >> 30)) + 3;
+    }
+    uint32_t operator() () {
+        uint32_t t = (a ^ (a << 11));
+        a = b; b = c; c = d;
+        return d = (d ^ (d >> 19)) ^ (t ^ (t >> 8));
+    }
+    static constexpr uint32_t max() { return numeric_limits<result_type>::max(); }
+    static constexpr uint32_t min() { return numeric_limits<result_type>::min(); }
+private:
+    uint32_t a, b, c, d;
+};
 
 struct union_find_tree {
     vector<int> data;
@@ -109,28 +133,31 @@ struct parameters {
 };
 
 struct solution {
-    const parameters & param;
+    const parameters *param;
 
     // the state of solution
     vector<bool> used;
     ll used_sum_p;
     ll used_sum_m;
     union_find_tree used_uft;
+    ll m_raw_score;
 
-    solution(parameters const & param_)
+    solution(const parameters *param_)
             : param(param_) {
-        auto const & N = param.N;
-        auto const & E = param.E;
+        assert (param != nullptr);
+        auto const & N = param->N;
+        auto const & E = param->E;
         used.resize(E);
         used_sum_p = 0;
         used_sum_m = 0;
         used_uft = union_find_tree(N);
+        m_raw_score = -1;
     }
 
     void use(int i) {
-        auto const & NM = param.NM;
-        auto const & E = param.E;
-        auto const & edges = param.edges;
+        auto const & NM = param->NM;
+        auto const & E = param->E;
+        auto const & edges = param->edges;
         assert (0 <= i and i <= E);
         if (used[i]) return;
         assert (used_sum_m + edges[i].m <= NM);
@@ -139,10 +166,11 @@ struct solution {
         used_sum_p += edges[i].p;
         used_sum_m += edges[i].m;
         used_uft.unite_trees(edges[i].a, edges[i].b);
+        m_raw_score = -1;
     }
 
     vector<int> get_answer() const {
-        auto const & E = param.E;
+        auto const & E = param->E;
         vector<int> answer;
         REP (i, E) {
             if (used[i]) {
@@ -153,7 +181,7 @@ struct solution {
     }
 
     tuple<int, vector<int>, vector<vector<int> > > get_compressed_graph() {
-        auto const & N = param.N;
+        auto const & N = param->N;
         int size = 0;
         vector<int> component_of(N, -1);
         vector<vector<int> > vertices_of;
@@ -170,14 +198,15 @@ struct solution {
     }
 
     ll get_raw_score() {
-        auto const & routes = param.routes;
+        auto const & routes = param->routes;
+        if (m_raw_score != -1) return m_raw_score;
         ll used_route_sum_p = 0;
         for (auto const & route : routes) {
             if (used_uft.is_same(route.a, route.b)) {
                 used_route_sum_p += route.p;
             }
         }
-        return used_sum_p * used_route_sum_p;
+        return m_raw_score = used_sum_p * used_route_sum_p;
     }
 };
 
@@ -235,9 +264,9 @@ tuple<vector<int>, ll, double> find_nice_path_for_route(parameters const & param
 }
 
 solution use_edges_greedily_without_routes(solution sln) {
-    auto const & NM = sln.param.NM;
-    auto const & E = sln.param.E;
-    auto const & edges = sln.param.edges;
+    auto const & NM = sln.param->NM;
+    auto const & E = sln.param->E;
+    auto const & edges = sln.param->edges;
 
     vector<int> order(E);
     iota(ALL(order), 0);
@@ -252,72 +281,68 @@ solution use_edges_greedily_without_routes(solution sln) {
     return sln;
 }
 
-vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes) {
-    double clock_begin = rdtsc();
+template <class Generator>
+vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes, double clock_begin, Generator & gen) {
     parameters param(NM, N, E, edges, R, routes);
     vector<int> answer;
     ll highscore = LLONG_MIN;
 
-    for (auto const & initial_route : routes) {
-        if ((rdtsc() - clock_begin) > TLE * 0.6) {
-            break;
-        }
+    solution sln(&param);
+    int size; vector<int> component_of; vector<vector<int> > vertices_of;
+    tie(size, component_of, vertices_of) = sln.get_compressed_graph();
 
-        solution sln(param);
-        {
-            int size; vector<int> component_of; vector<vector<int> > vertices_of;
-            tie(size, component_of, vertices_of) = sln.get_compressed_graph();
-
-            vector<int> path; ll sum_m;
-            tie(path, sum_m, ignore) = find_nice_path_for_route(param, initial_route, size, component_of, vertices_of);
-
-            if (sum_m > NM) continue;
-            for (int i : path) {
-                sln.use(i);
-            }
-        }
-
-        auto commit = [&]() {
-            auto sln1 = use_edges_greedily_without_routes(sln);
-            ll score = sln1.get_raw_score();
-            if (highscore < score) {
-                highscore = score;
-                answer = sln1.get_answer();
-            }
-        };
-
-        commit();
-
-        while (true) {
-            int size; vector<int> component_of; vector<vector<int> > vertices_of;
-            tie(size, component_of, vertices_of) = sln.get_compressed_graph();
-
-            vector<int> selected_path;
-            double selected_value = - INFINITY;
-
-            for (auto const & route : routes) {
-                vector<int> path; ll sum_m; double value;
-                tie(path, sum_m, value) = find_nice_path_for_route(param, route, size, component_of, vertices_of);
-
-                if (sln.used_sum_m + sum_m > NM) {
-                    continue;
-                }
-                if (selected_value < value) {
-                    selected_value = value;
-                    selected_path = path;
-                }
-            }
-
-            if (not selected_path.empty()) {
-                for (int i : selected_path) {
-                    assert (not sln.used_uft.is_same(edges[i].a, edges[i].b));
-                    sln.use(i);
-                }
-            } else {
+    double temperature = 1;
+    for (unsigned iteration = 0; ; ++ iteration) {
+        if (iteration % 32 == 0) {
+            temperature = 1.0 - (rdtsc() - clock_begin) / (TLE * 0.8);
+            if (temperature <= 0.0) {
                 break;
             }
+        }
 
-            commit();
+        vector<int> path;
+        ll sum_m;
+        if (bernoulli_distribution(0.2)(gen)) {
+            int i = uniform_int_distribution<int>(0, E - 1)(gen);
+            path.push_back(i);
+            sum_m = (sln.used[i] ? 0 : edges[i].m);
+        } else {
+            int i = uniform_int_distribution<int>(0, R - 1)(gen);
+            tie(path, sum_m, ignore) = find_nice_path_for_route(param, routes[i], size, component_of, vertices_of);
+        }
+
+        solution next_sln = sln;
+        if (0 < sum_m and sln.used_sum_m + sum_m <= NM) {
+            for (int i : path) {
+                next_sln.use(i);
+            }
+        } else {
+            vector<int> order = path;
+            REP (i, E) if (sln.used[i]) {
+                order.push_back(i);
+            }
+            shuffle(order.begin() + path.size(), order.end(), gen);
+            next_sln = solution(&param);
+            for (int i : order) {
+                if (next_sln.used_sum_m + edges[i].m <= NM) {
+                    next_sln.use(i);
+                }
+            }
+        }
+
+        ll delta = next_sln.get_raw_score() - sln.get_raw_score();
+        auto probability = [&]() {
+            constexpr double boltzmann = 0.01;
+            return exp(boltzmann * delta) * temperature;
+        };
+        if (delta >= 0 or bernoulli_distribution(probability())(gen)) {
+            if (delta < 0) cerr << "iteration = " << iteration << ": delta = " << delta << endl;
+            sln = next_sln;
+            if (highscore < sln.get_raw_score()) {
+                highscore = sln.get_raw_score();
+                answer = sln.get_answer();
+                cerr << "iteration = " << iteration << ": highscore = " << highscore << endl;
+            }
         }
     }
 
@@ -329,6 +354,8 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
 class RoadNetwork {
 public:
     vector<int> findSolution(int NM, int N, int E, vector<string> edges, int R, vector<string> routes) {
+        double clock_begin = rdtsc();
+
         assert (30 <= N and N <= 1000);
         assert (N - 1 <= E);
         assert (5 <= R and R <= N / 4);
@@ -354,6 +381,7 @@ public:
             assert (1 <= route.p);
         }
 
-        return find_solution(NM, N, E, parsed_edges, R, parsed_routes);
+        xor_shift_128 gen;
+        return find_solution(NM, N, E, parsed_edges, R, parsed_routes, clock_begin, gen);
     }
 };
