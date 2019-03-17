@@ -142,6 +142,23 @@ struct solution {
         }
         return answer;
     }
+
+    tuple<int, vector<int>, vector<vector<int> > > get_compressed_graph() {
+        auto const & N = param.N;
+        int size = 0;
+        vector<int> component_of(N, -1);
+        vector<vector<int> > vertices_of;
+        REP (a, N) {
+            int b = used_uft.find_root(a);
+            if (component_of[b] == -1) {
+                component_of[b] = (size ++);
+                vertices_of.emplace_back();
+            }
+            component_of[a] = component_of[b];
+            vertices_of[component_of[a]].push_back(a);
+        }
+        return make_tuple(size, component_of, vertices_of);
+    }
 };
 
 vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes) {
@@ -150,51 +167,57 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
     auto & uft = sln.used_uft;
 
     while (true) {
+        int size; vector<int> component_of; vector<vector<int> > vertices_of;
+        tie(size, component_of, vertices_of) = sln.get_compressed_graph();
+
         vector<int> selected_path;
         double selected_value = - INFINITY;
 
         for (auto const & route : routes) if (not uft.is_same(route.a, route.b)) {
             // Dijkstra
-            vector<int> parent(N, -1);
-            vector<ll> sum_p(N, LLONG_MIN);
-            vector<ll> sum_m(N, LLONG_MAX);
+            vector<int> parent(size, -1);
+            vector<int> path_edge(size, -1);
+            vector<ll> sum_p(size, LLONG_MIN);
+            vector<ll> sum_m(size, LLONG_MAX);
             reversed_priority_queue<pair<ll, int> > que;
-            sum_p[route.a] = 0;
-            sum_m[route.a] = 0;
-            que.emplace(0, route.a);
+            sum_p[component_of[route.a]] = 0;
+            sum_m[component_of[route.a]] = 0;
+            que.emplace(0, component_of[route.a]);
             while (not que.empty()) {
-                ll sum_m_a; int a; tie(sum_m_a, a) = que.top();
+                ll sum_m_x; int x; tie(sum_m_x, x) = que.top();
                 que.pop();
-                if (a == route.b) break;
-                if (sum_m[a] < sum_m_a) continue;
+                if (x == component_of[route.b]) break;
+                if (sum_m[x] < sum_m_x) continue;
 
-                for (int i : param.edges_of[a]) {
-                    int b = (a ^ edges[i].a ^ edges[i].b);
-                    ll sum_m_b = sum_m[a] + (uft.is_same(a, b) ? 0 : edges[i].m);
-                    if (sum_m_b < sum_m[b]) {
-                        sum_m[b] = sum_m_b;
-                        sum_p[b] = sum_p[a] + (uft.is_same(a, b) ? 0 : edges[i].p);
-                        parent[b] = a;
-                        que.emplace(sum_m_b, b);
+                for (int a : vertices_of[x]) {
+                    for (int i : param.edges_of[a]) {
+                        int b = (a ^ edges[i].a ^ edges[i].b);
+                        if (uft.is_same(a, b)) continue;
+                        int y = component_of[b];
+                        ll sum_m_y = sum_m[x] + edges[i].m;
+                        if (sum_m_y < sum_m[y]) {
+                            sum_m[y] = sum_m_y;
+                            sum_p[y] = sum_p[x] + edges[i].p;
+                            parent[y] = x;
+                            path_edge[y] = i;
+                            que.emplace(sum_m_y, y);
+                        }
                     }
                 }
             }
-            assert (sum_m[route.b] != LLONG_MAX);
-            if (sln.used_sum_m + sum_m[route.b] > NM) {
+            assert (sum_m[component_of[route.b]] != LLONG_MAX);
+            if (sln.used_sum_m + sum_m[component_of[route.b]] > NM) {
                 continue;
             }
 
             // reconstruct path
             vector<int> path;
-            path.push_back(route.b);
-            while (parent[path.back()] != -1) {
-                path.push_back(parent[path.back()]);
+            for (int x = component_of[route.b]; path_edge[x] != -1; x = parent[x]) {
+                path.push_back(path_edge[x]);
             }
             reverse(ALL(path));
-            assert (path.front() == route.a);
-            assert (path.back() == route.b);
 
-            double value = (double)(sum_p[route.b] + route.p) / sum_m[route.b];
+            double value = (double)(sum_p[component_of[route.b]] + route.p) / sum_m[component_of[route.b]];
             if (selected_value < value) {
                 selected_value = value;
                 selected_path = path;
@@ -203,18 +226,12 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
 
         if (not selected_path.empty()) {
             cerr << "use path:";
-            assert (not uft.is_same(selected_path.front(), selected_path.back()));
-            REP (i, selected_path.size() - 1) {
-                int a = selected_path[i];
-                int b = selected_path[i + 1];
-                int j = param.find_edge(a, b);
-                cerr << " " << j;
-                if (not sln.used_uft.is_same(a, b)) {
-                    sln.use(j);
-                }
+            for (int i : selected_path) {
+                cerr << " " << i;
+                assert (not sln.used_uft.is_same(edges[i].a, edges[i].b));
+                sln.use(i);
             }
             cerr << endl;
-            assert (uft.is_same(selected_path.front(), selected_path.back()));
         } else {
             break;
         }
