@@ -31,6 +31,7 @@ public class RoadNetworkVis {
     int RouteScore=0;
     int EdgeScore=0;
     int MaterialsUsed=0;
+    long SeedValue;
 
     //inputs
     int N;      //num cities
@@ -47,6 +48,7 @@ public class RoadNetworkVis {
         SecureRandom r1 = SecureRandom.getInstance("SHA1PRNG"); 
         long seed = Long.parseLong(seedStr);
         r1.setSeed(seed);
+        SeedValue = seed;
 
         N = r1.nextInt(maxN - minN + 1) + minN;
 
@@ -539,7 +541,8 @@ loop:
 
         if (json)
         {
-          System.out.print("{\"NM\":"+NumMaterials);
+          System.out.print("{\"seed\":"+SeedValue);
+          System.out.print(",\"NM\":"+NumMaterials);
           System.out.print(",\"N\":"+N);
           System.out.print(",\"E\":"+Edges.size());
           System.out.print(",\"R\":"+NumRoutes);
