@@ -442,7 +442,7 @@ loop:
             for (int i=0; i<NumRoutes; i++)
             {
               Edge r=Routes[i];
-              if (!isInRouteCompleted[i]) {
+              if (isInRouteCompleted != null && !isInRouteCompleted[i]) {
                 isInRouteFailed[r.a]=true;
                 isInRouteFailed[r.b]=true;
               }
@@ -463,7 +463,7 @@ loop:
             for (int i=0; i<NumRoutes; i++)
             {
               Edge r=Routes[i];
-              if (isInRouteCompleted[i]) g2.setColor(Color.GREEN);
+              if (isInRouteCompleted != null && isInRouteCompleted[i]) g2.setColor(Color.GREEN);
               else g2.setColor(Color.RED);
               Stroke dashed = new BasicStroke(1, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[]{1,3}, 0);
               g2.setStroke(dashed);
