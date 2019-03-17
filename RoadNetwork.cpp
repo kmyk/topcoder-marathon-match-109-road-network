@@ -52,21 +52,106 @@ struct route_t {
     ll p;
 };
 
-vector<bool> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes) {
-    vector<vector<int> > edges_of(N);
-    REP (i, E) {
-        edges_of[edges[i].a].push_back(i);
-        edges_of[edges[i].b].push_back(i);
+struct parameters {
+    ll NM;
+    int N;
+    int E;
+    vector<connection_t> edges;
+    int R;
+    vector<route_t> routes;
+
+    vector<vector<int> > edges_of;
+    vector<vector<int> > routes_of;
+
+    parameters(ll NM_, int N_, int E_, vector<connection_t> const & edges_, int R_, vector<route_t> const & routes_)
+            : NM(NM_), N(N_), E(E_), edges(edges_), R(R_), routes(routes_) {
+        for (auto & edge : edges) {
+            if (edge.a > edge.b) {
+                swap(edge.a, edge.b);
+            }
+        }
+
+        for (auto & route : routes) {
+            if (route.a > route.b) {
+                swap(route.a, route.b);
+            }
+        }
+
+        edges_of.resize(N);
+        REP (i, E) {
+            edges_of[edges[i].a].push_back(i);
+            edges_of[edges[i].b].push_back(i);
+        }
+
+        routes_of.resize(N);
+        REP (i, R) {
+            routes_of[routes[i].a].push_back(i);
+            routes_of[routes[i].b].push_back(i);
+        }
     }
 
-    vector<bool> answer(E);
-    ll answer_sum_m = 0;
-    union_find_tree uft(N);
+    int find_edge(int a, int b) {
+        if (a > b) swap(a, b);
+        assert (not edges_of[a].empty());
+        int j = edges_of[a].size() - 1;
+        while (j >= 0 and (a != edges[edges_of[a][j]].a or b != edges[edges_of[a][j]].b)) -- j;
+        return edges_of[a][j];
+    }
+};
+
+struct solution {
+    const parameters param;
+
+    // the state of solution
+    vector<bool> used;
+    ll used_sum_p;
+    ll used_sum_m;
+    union_find_tree used_uft;
+
+    solution(parameters const & param_)
+            : param(param_) {
+        auto const & N = param.N;
+        auto const & E = param.E;
+        used.resize(E);
+        used_sum_p = 0;
+        used_sum_m = 0;
+        used_uft = union_find_tree(N);
+    }
+
+    void use(int i) {
+        auto const & NM = param.NM;
+        auto const & E = param.E;
+        auto const & edges = param.edges;
+        assert (0 <= i and i <= E);
+        if (used[i]) return;
+        assert (used_sum_m + edges[i].m <= NM);
+
+        used[i] = true;
+        used_sum_p += edges[i].p;
+        used_sum_m += edges[i].m;
+        used_uft.unite_trees(edges[i].a, edges[i].b);
+    }
+
+    vector<int> get_answer() const {
+        auto const & E = param.E;
+        vector<int> answer;
+        REP (i, E) {
+            if (used[i]) {
+                answer.push_back(i);
+            }
+        }
+        return answer;
+    }
+};
+
+vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes) {
+    parameters param(NM, N, E, edges, R, routes);
+    solution sln(param);
+    auto & uft = sln.used_uft;
 
     while (true) {
         vector<int> selected_path;
         double selected_value = - INFINITY;
-        ll selected_sum_m = LLONG_MAX;
 
         for (auto const & route : routes) if (not uft.is_same(route.a, route.b)) {
             // Dijkstra
@@ -82,7 +167,8 @@ vector<bool> find_solution(ll NM, int N, int E, vector<connection_t> const & edg
                 que.pop();
                 if (a == route.b) break;
                 if (sum_m[a] < sum_m_a) continue;
-                for (int i : edges_of[a]) {
+
+                for (int i : param.edges_of[a]) {
                     int b = (a ^ edges[i].a ^ edges[i].b);
                     ll sum_m_b = sum_m[a] + (uft.is_same(a, b) ? 0 : edges[i].m);
                     if (sum_m_b < sum_m[b]) {
@@ -94,7 +180,7 @@ vector<bool> find_solution(ll NM, int N, int E, vector<connection_t> const & edg
                 }
             }
             assert (sum_m[route.b] != LLONG_MAX);
-            if (answer_sum_m + sum_m[route.b] > NM) {
+            if (sln.used_sum_m + sum_m[route.b] > NM) {
                 continue;
             }
 
@@ -111,24 +197,20 @@ vector<bool> find_solution(ll NM, int N, int E, vector<connection_t> const & edg
             double value = (double)(sum_p[route.b] + route.p) / sum_m[route.b];
             if (selected_value < value) {
                 selected_value = value;
-                selected_sum_m = sum_m[route.b];
                 selected_path = path;
             }
         }
 
-        if (not selected_path.empty() and answer_sum_m + selected_sum_m <= NM) {
+        if (not selected_path.empty()) {
             cerr << "use path:";
-            answer_sum_m += selected_sum_m;
             assert (not uft.is_same(selected_path.front(), selected_path.back()));
             REP (i, selected_path.size() - 1) {
                 int a = selected_path[i];
                 int b = selected_path[i + 1];
-                int j = 0;
-                while (minmax({ a, b }) != minmax({ edges[edges_of[a][j]].a, edges[edges_of[a][j]].b })) ++ j;
-                cerr << " " << edges_of[a][j];
-                if (not uft.is_same(a, b)) {
-                    answer[edges_of[a][j]] = true;
-                    uft.unite_trees(a, b);
+                int j = param.find_edge(a, b);
+                cerr << " " << j;
+                if (not sln.used_uft.is_same(a, b)) {
+                    sln.use(j);
                 }
             }
             cerr << endl;
@@ -145,14 +227,13 @@ vector<bool> find_solution(ll NM, int N, int E, vector<connection_t> const & edg
         return edges[i].p * edges[j].m > edges[j].p * edges[i].m;
     });
     for (int i : order) {
-        if (not answer[i] and answer_sum_m + edges[i].m <= NM) {
-            answer[i] = true;
-            answer_sum_m += edges[i].m;
+        if (not sln.used[i] and sln.used_sum_m + edges[i].m <= NM) {
+            sln.use(i);
             cerr << "use edge: " << i << endl;
         }
     }
 
-    return answer;
+    return sln.get_answer();
 }
 
 
@@ -184,14 +265,6 @@ public:
             assert (1 <= route.p);
         }
 
-        vector<bool> used = find_solution(NM, N, E, parsed_edges, R, parsed_routes);
-
-        vector<int> answer;
-        REP (i, E) {
-            if (used[i]) {
-                answer.push_back(i);
-            }
-        }
-        return answer;
+        return find_solution(NM, N, E, parsed_edges, R, parsed_routes);
     }
 };
