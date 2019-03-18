@@ -4,6 +4,7 @@ import java.awt.image.*;
 import java.io.*;
 import java.security.*;
 import java.util.*;
+import javax.imageio.*;
 import javax.swing.*;
 
 
@@ -392,6 +393,7 @@ loop:
     static boolean showNumbers;
     static boolean Debug;
     static boolean json;
+    static String save;
     static Process proc;
     InputStream is;
     OutputStream os;
@@ -426,7 +428,9 @@ loop:
     }
     // -----------------------------------------
     public class Vis extends JPanel implements MouseListener, WindowListener {
-        public void paint(Graphics g) {
+        public void paint(Graphics g1) {
+            BufferedImage bi = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_RGB);
+            Graphics g = bi.getGraphics();
             
             // background
             g.setColor(new Color(0xDDDDDD));
@@ -519,6 +523,13 @@ loop:
             g.drawString(String.format("Routes score: %d", RouteScore), Width+25, 90);
             g.drawString(String.format("Connections score: %d", EdgeScore), Width+25, 120);
             g.drawString(String.format("SCORE: %d", RouteScore*1L*EdgeScore), Width+25, 150);
+
+            ((Graphics2D) g1.create()).drawImage(bi, null, 0, 0);
+            if (save != null) {
+              try {
+                ImageIO.write(bi, "png", new File(save));
+              } catch (Exception e) { e.printStackTrace(); }
+            }
         }
         // -------------------------------------
         public Vis() {
@@ -659,6 +670,7 @@ loop:
         showNumbers = false;
         Debug = false;
         json = false;
+        save = null;
         for (int i = 0; i<args.length; i++)
         {   if (args[i].equals("-seed"))
                 seed = args[++i];
@@ -672,6 +684,8 @@ loop:
                 Debug = true;                                
             if (args[i].equals("-json"))
                 json = true;
+            if (args[i].equals("-save"))
+                save = args[++i];
             if (args[i].equals("-width"))
                 Width = Integer.parseInt(args[++i]);
             if (args[i].equals("-height"))
