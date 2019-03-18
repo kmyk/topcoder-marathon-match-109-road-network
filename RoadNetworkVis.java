@@ -428,6 +428,7 @@ loop:
     }
     public BufferedImage getBufferedImage() {
             BufferedImage bi = new BufferedImage(Width + extraW, Height + extraH, BufferedImage.TYPE_INT_RGB);
+            if (isInRouteCompleted == null) return bi;
             Graphics g = bi.getGraphics();
             
             // background
@@ -440,22 +441,22 @@ loop:
             double ratioY=1.0/H*Height;
             
             
-            boolean[] isInRouteFailed=new boolean[N];
+            boolean[] cityInRouteCompleted=new boolean[N];
+            boolean[] cityInRouteFailed=new boolean[N];
             for (int i=0; i<NumRoutes; i++)
             {
               Edge r=Routes[i];
-              if (isInRouteCompleted != null && !isInRouteCompleted[i]) {
-                isInRouteFailed[r.a]=true;
-                isInRouteFailed[r.b]=true;
+              if (isInRouteCompleted[i]) {
+                cityInRouteCompleted[r.a]=true;
+                cityInRouteCompleted[r.b]=true;
+              } else {
+                cityInRouteFailed[r.a]=true;
+                cityInRouteFailed[r.b]=true;
               }
             }
             
-            boolean[] cityInReturn=new boolean[N];
             boolean[] edgeInReturn=new boolean[Edges.size()];
             for (int i : Ret) {
-              Edge r=Edges.get(i);
-              cityInReturn[r.a]=true;
-              cityInReturn[r.b]=true;
               edgeInReturn[i]=true;
             }
            
@@ -465,7 +466,7 @@ loop:
             for (int i=0; i<NumRoutes; i++)
             {
               Edge r=Routes[i];
-              if (isInRouteCompleted != null && isInRouteCompleted[i]) g2.setColor(Color.GREEN);
+              if (isInRouteCompleted[i]) g2.setColor(Color.GREEN);
               else g2.setColor(Color.RED);
               Stroke dashed = new BasicStroke(1, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[]{1,3}, 0);
               g2.setStroke(dashed);
@@ -499,11 +500,15 @@ loop:
             //cities
             for (int i=0; i<N; i++)
             {
-              if (isInRouteFailed[i]) g.setColor(Color.RED);
-              else if (cityInReturn[i]) g.setColor(Color.GREEN);
+              if (cityInRouteCompleted[i]) g.setColor(Color.GREEN);
+              else if (cityInRouteFailed[i]) g.setColor(Color.RED);
               else g.setColor(Color.BLUE);
               
               g.fillOval((int)((CityX[i]-CitySize/2)*ratioX),(int)((CityY[i]-CitySize/2)*ratioY),(int)(CitySize*ratioX),(int)(CitySize*ratioY));
+              if (cityInRouteFailed[i] && cityInRouteCompleted[i]) {
+                g.setColor(Color.RED);
+                g.fillArc((int)((CityX[i]-CitySize/2)*ratioX),(int)((CityY[i]-CitySize/2)*ratioY),(int)(CitySize*ratioX),(int)(CitySize*ratioY), 30, 210);
+              }
               
               if (showNumbers)
               {
@@ -623,6 +628,9 @@ loop:
           try {
             ImageIO.write(bi, "png", new File(save));
           } catch (Exception e) { e.printStackTrace(); }
+        }
+        if (vis) {
+          draw();
         }
       }
       catch (Exception e) { e.printStackTrace(); }
