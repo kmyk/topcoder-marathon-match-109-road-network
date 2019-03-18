@@ -426,10 +426,8 @@ loop:
         if (!vis) return;
         v.repaint();
     }
-    // -----------------------------------------
-    public class Vis extends JPanel implements MouseListener, WindowListener {
-        public void paint(Graphics g1) {
-            BufferedImage bi = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_RGB);
+    public BufferedImage getBufferedImage() {
+            BufferedImage bi = new BufferedImage(Width + extraW, Height + extraH, BufferedImage.TYPE_INT_RGB);
             Graphics g = bi.getGraphics();
             
             // background
@@ -524,12 +522,13 @@ loop:
             g.drawString(String.format("Connections score: %d", EdgeScore), Width+25, 120);
             g.drawString(String.format("SCORE: %d", RouteScore*1L*EdgeScore), Width+25, 150);
 
-            ((Graphics2D) g1.create()).drawImage(bi, null, 0, 0);
-            if (save != null) {
-              try {
-                ImageIO.write(bi, "png", new File(save));
-              } catch (Exception e) { e.printStackTrace(); }
-            }
+            return bi;
+    }
+    // -----------------------------------------
+    public class Vis extends JPanel implements MouseListener, WindowListener {
+        public void paint(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.drawImage(getBufferedImage(), null, 0, 0);
         }
         // -------------------------------------
         public Vis() {
@@ -617,6 +616,13 @@ loop:
           System.out.print(",\"edgeScore\":"+EdgeScore);
           System.out.print("}");
           System.out.println("}");
+        }
+
+        if (save != null) {
+          BufferedImage bi = getBufferedImage();
+          try {
+            ImageIO.write(bi, "png", new File(save));
+          } catch (Exception e) { e.printStackTrace(); }
         }
       }
       catch (Exception e) { e.printStackTrace(); }
