@@ -97,6 +97,8 @@ $ for commit in $COMMITS ; do for i in $(seq 2000) ; do cat log/${commit}.${i}.j
 ルートのコスパ順 ((辺評価の総和 + ルート評価) / 辺費用の総和) のもの `20673a651715e1226363c8910012077444081827` を使った。
 ひとつめのルートを総当たりする解はまだ評価が済んでいないのとバグが残ってそうだったため。
 
+<details>
+<summary>順位表</summary>
 
 | Handle           | Score      | Rank  | Last Submission Time  | Language  | Example Tests  | Submissions  |
 |------------------|------------|-------|-----------------------|-----------|----------------|--------------|
@@ -134,6 +136,8 @@ $ for commit in $COMMITS ; do for i in $(seq 2000) ; do cat log/${commit}.${i}.j
 | usto             |            |       |                       |           | 1              | 0            |
 | yarrr            |            |       |                       |           | 1              | 0            |
 
+</details>
+
 1位の wleite さんと比べると点数を 981684.78 / 824296.54 = 1.1909364 倍にできることが分かる。
 現状の点数は 0.14366054 * 0.62282140 であるが、辺とルートをそれぞれ √2 倍すればよいと考えると 0.15737224 * 0.68226666 が目標となる。
 
@@ -152,6 +156,8 @@ branch [official-visualizer](https://github.com/kmyk/topcoder-marathon-match-109
 でも9位。これはちょっと焦る。
 赤維持どころか [TCO Japan regional](https://tco19.topcoder.com/regional-events/tco19-regional-event-japan) に行くにも点数が足りなさそう。
 
+<details>
+<summary>順位表</summary>
 
 | Handle          |     Score |   Rank | Last Submission Time   | Language   |   Example Tests |   Submissions |
 |-----------------|-----------|--------|------------------------|------------|-----------------|---------------|
@@ -188,6 +194,8 @@ branch [official-visualizer](https://github.com/kmyk/topcoder-marathon-match-109
 | sumoru          |           |        |                        |            |               8 |             0 |
 | usto            |           |        |                        |            |               1 |             0 |
 | yarrr           |           |        |                        |            |               1 |             0 |
+
+</details>
 
 ところで `oj submit` の `--full-submission` が壊れた？
 さっきは提出に成功したのに今は → デグレ <https://github.com/kmyk/online-judge-tools/issues/393>
@@ -244,7 +252,7 @@ visualizer を読んだ。
 画像を出力できるようにした
 
 <details>
-<summary>貪欲, 辺コスパ順</summary>
+<summary>画像: 貪欲, 辺コスパ順</summary>
 
 [6c0b6a595739e994b57aeb153393bd0a933445f9](https://github.com/kmyk/topcoder-marathon-match-109-road-network/commit/6c0b6a595739e994b57aeb153393bd0a933445f9)
 
@@ -262,7 +270,7 @@ visualizer を読んだ。
 </details>
 
 <details>
-<summary>貪欲, ルートコスパ順</summary>
+<summary>画像: 貪欲, ルートコスパ順</summary>
 
 [20673a651715e1226363c8910012077444081827](https://github.com/kmyk/topcoder-marathon-match-109-road-network/commit/20673a651715e1226363c8910012077444081827)
 
@@ -280,7 +288,7 @@ visualizer を読んだ。
 </details>
 
 <details>
-<summary>貪欲, ルートコスパ順 + 1手目総当たり</summary>
+<summary>画像: 貪欲, ルートコスパ順 + 1手目総当たり</summary>
 
 [42d69838a9dac2320aabaab8afeebb6efcebbd1c](https://github.com/kmyk/topcoder-marathon-match-109-road-network/commit/42d69838a9dac2320aabaab8afeebb6efcebbd1c)
 
@@ -298,7 +306,7 @@ visualizer を読んだ。
 </details>
 
 <details>
-<summary>焼きなまし, 雑</summary>
+<summary>画像: 焼きなまし, 雑</summary>
 
 [24418d448d1734bc19dc2055b3791f28a682972c](https://github.com/kmyk/topcoder-marathon-match-109-road-network/commit/24418d448d1734bc19dc2055b3791f28a682972c)
 
