@@ -3,6 +3,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdlib>
+#include <functional>
 #include <iostream>
 #include <iterator>
 #include <map>
@@ -21,6 +22,8 @@
 using ll = long long;
 using namespace std;
 template <class T> using reversed_priority_queue = priority_queue<T, vector<T>, greater<T> >;
+template <class T, class U> inline void chmax(T & a, U const & b) { a = max<T>(a, b); }
+template <class T, class U> inline void chmin(T & a, U const & b) { a = min<T>(a, b); }
 
 
 constexpr double ticks_per_sec = 2800000000;
@@ -74,6 +77,46 @@ struct union_find_tree {
     bool is_same(int i, int j) { return find_root(i) == find_root(j); }
 };
 
+template <class T, class Func>
+vector<T> run_dijkstra(int n, int root, Func iterate) {
+    vector<T> dist(n, numeric_limits<T>::max());
+    priority_queue<pair<T, int> > que;
+    dist[root] = 0;
+    que.emplace(- dist[root], root);
+    while (not que.empty()) {
+        T dist_i; int i; tie(dist_i, i) = que.top(); que.pop();
+        if (dist[i] < - dist_i) continue;
+        iterate(i, [&](int j, T cost) {
+            if (- dist_i + cost < dist[j]) {
+                dist[j] = - dist_i + cost;
+                que.emplace(dist_i - cost, j);
+            }
+        });
+    }
+    return dist;
+}
+
+template <class T, class Func>
+vector<int> reconstruct_edges_dijkstra(int n, int src, int dst, vector<T> const & dist, Func iterate) {
+    vector<int> edges;
+    int i = dst;
+    while (i != src) {
+        int next = -1;
+        int next_edge = -1;
+        iterate(i, [&](int j, int edge, T cost) {
+            if (dist[i] == dist[j] + cost) {
+                next = j;
+                next_edge = edge;
+            }
+        });
+        assert (next != -1);
+        i = next;
+        edges.push_back(next_edge);
+    }
+    reverse(ALL(edges));
+    return edges;
+}
+
 
 struct connection_t {
     int a, b;
@@ -95,6 +138,8 @@ struct parameters {
 
     vector<vector<int> > edges_of;
     vector<vector<int> > routes_of;
+    vector<int> greedy_order;
+    // vector<vector<ll> > dist;
 
     parameters(ll NM_, int N_, int E_, vector<connection_t> const & edges_, int R_, vector<route_t> const & routes_)
             : NM(NM_), N(N_), E(E_), edges(edges_), R(R_), routes(routes_) {
@@ -121,6 +166,31 @@ struct parameters {
             routes_of[routes[i].a].push_back(i);
             routes_of[routes[i].b].push_back(i);
         }
+
+        greedy_order.resize(E);
+        iota(ALL(greedy_order), 0);
+        sort(ALL(greedy_order), [&](int i, int j) {
+            return edges[i].p * edges[j].m > edges[j].p * edges[i].m;
+        });
+
+/*
+        // Warshall-Floyd
+        dist.resize(N, vector<ll>(N, LLONG_MAX / 3));
+        REP (a, N) {
+            dist[a][a] = 0;
+        }
+        for (auto const & edge : edges) {
+            dist[edge.a][edge.b] = edge.m;
+            dist[edge.b][edge.a] = edge.m;
+        }
+        REP (c, N) {
+            REP (a, N) if (dist[c][a] != LLONG_MAX / 3) {
+                REP (b, N) {
+                    chmin(dist[a][b], dist[a][c] + dist[c][b]);
+                }
+            }
+        }
+*/
     }
 
     int find_edge(int a, int b) {
@@ -154,19 +224,43 @@ struct solution {
         m_raw_score = -1;
     }
 
-    void use(int i) {
+    bool use(int i) {
         auto const & NM = param->NM;
         auto const & E = param->E;
         auto const & edges = param->edges;
         assert (0 <= i and i <= E);
-        if (used[i]) return;
-        assert (used_sum_m + edges[i].m <= NM);
+        if (used[i]) return false;
+        if (edges[i].m + used_sum_m > NM) return false;
 
         used[i] = true;
         used_sum_p += edges[i].p;
         used_sum_m += edges[i].m;
         used_uft.unite_trees(edges[i].a, edges[i].b);
         m_raw_score = -1;
+        return true;
+    }
+
+    bool use_path(vector<int> const & path) {
+        auto const & NM = param->NM;
+        auto const & edges = param->edges;
+        ll sum_m = 0;
+        for (int i : path) {
+            if (not used[i]) {
+                sum_m += edges[i].m;
+            }
+        }
+        if (sum_m + used_sum_m > NM) return false;
+
+        for (int i : path) {
+            bool success = use(i);
+            assert (success);
+        }
+        return true;
+    }
+
+    bool is_valid() {
+        auto const & NM = param->NM;
+        return (used_sum_m <= NM);
     }
 
     vector<int> get_answer() const {
@@ -198,8 +292,11 @@ struct solution {
     }
 
     ll get_raw_score() {
+        auto const & NM = param->NM;
         auto const & routes = param->routes;
         if (m_raw_score != -1) return m_raw_score;
+        if (NM < used_sum_m) return 0;
+
         ll used_route_sum_p = 0;
         for (auto const & route : routes) {
             if (used_uft.is_same(route.a, route.b)) {
@@ -267,18 +364,48 @@ solution use_edges_greedily_without_routes(solution sln) {
     auto const & NM = sln.param->NM;
     auto const & E = sln.param->E;
     auto const & edges = sln.param->edges;
+    auto const & greedy_order = sln.param->greedy_order;
 
-    vector<int> order(E);
-    iota(ALL(order), 0);
-    sort(ALL(order), [&](int i, int j) {
-        return edges[i].p * edges[j].m > edges[j].p * edges[i].m;
-    });
-    for (int i : order) {
+    for (int i : greedy_order) {
         if (not sln.used[i] and sln.used_sum_m + edges[i].m <= NM) {
             sln.use(i);
         }
     }
     return sln;
+}
+
+vector<vector<int> > generate_paths_for_route(parameters const & param, route_t const & route, int size) {
+    auto const & N = param.N;
+    auto const & E = param.E;
+    auto const & edges = param.edges;
+    auto const & edges_of = param.edges_of;
+
+    vector<vector<int> > paths;
+    vector<int> count(E);
+    while (paths.size() < size) {
+        auto dist_from_src = run_dijkstra<ll>(N, route.a, [&](int a, function<void (int, ll)> callback) {
+            for (int i : edges_of[a]) {
+                auto const & edge = edges[i];
+                int b = a ^ edge.a ^ edge.b;
+                callback(b, count[i] + edge.m);
+            }
+        });
+        vector<int> path = reconstruct_edges_dijkstra(N, route.a, route.b, dist_from_src, [&](int a, function<void (int, int, ll)> callback) {
+            for (int i : edges_of[a]) {
+                auto const & edge = edges[i];
+                int b = a ^ edge.a ^ edge.b;
+                callback(b, i, count[i] + edge.m);
+            }
+        });
+
+        for (int i : path) {
+            ++ count[i];
+        }
+        if (find(ALL(paths), path) == paths.end()) {
+            paths.push_back(path);
+        }
+    }
+    return paths;
 }
 
 template <class Generator>
@@ -287,9 +414,13 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
     vector<int> answer;
     ll highscore = LLONG_MIN;
 
-    solution sln(&param);
-    int size; vector<int> component_of; vector<vector<int> > vertices_of;
-    tie(size, component_of, vertices_of) = sln.get_compressed_graph();
+    vector<vector<vector<int> > > paths_for_route(R);
+    REP (i, R) {
+        constexpr int SIZE = 50;
+        paths_for_route[i] = generate_paths_for_route(param, routes[i], SIZE);
+    }
+    vector<pair<int, int> > cur;
+    ll score = 0;
 
     double temperature = 1;
     for (unsigned iteration = 0; ; ++ iteration) {
@@ -300,44 +431,33 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
             }
         }
 
-        vector<int> path;
-        ll sum_m;
-        if (bernoulli_distribution(0.2)(gen)) {
-            int i = uniform_int_distribution<int>(0, E - 1)(gen);
-            path.push_back(i);
-            sum_m = (sln.used[i] ? 0 : edges[i].m);
-        } else {
-            int i = uniform_int_distribution<int>(0, R - 1)(gen);
-            tie(path, sum_m, ignore) = find_nice_path_for_route(param, routes[i], size, component_of, vertices_of);
-        }
+        int i = uniform_int_distribution<int>(0, R - 1)(gen);
+        int j = uniform_int_distribution<int>(0, paths_for_route[i].size() - 1)(gen);
 
-        solution next_sln = sln;
-        if (0 < sum_m and sln.used_sum_m + sum_m <= NM) {
-            for (int i : path) {
-                next_sln.use(i);
-            }
+        // use the path
+        vector<pair<int, int> > nxt;
+        solution sln(&param);
+        if (sln.use_path(paths_for_route[i][j])) {
+            nxt.emplace_back(i, j);
         } else {
-            vector<int> order = path;
-            REP (i, E) if (sln.used[i]) {
-                order.push_back(i);
-            }
-            shuffle(order.begin() + path.size(), order.end(), gen);
-            next_sln = solution(&param);
-            for (int i : order) {
-                if (next_sln.used_sum_m + edges[i].m <= NM) {
-                    next_sln.use(i);
-                }
+            continue;
+        }
+        shuffle(ALL(cur), gen);
+        for (auto it : cur) {
+            int i, j; tie(i, j) = it;
+            if (sln.use_path(paths_for_route[i][j])) {
+                nxt.push_back(it);
             }
         }
 
-        ll delta = next_sln.get_raw_score() - sln.get_raw_score();
+        use_edges_greedily_without_routes(sln);
+        ll delta = sln.get_raw_score() - score;
         auto probability = [&]() {
-            constexpr double boltzmann = 0.01;
+            constexpr double boltzmann = 1;
             return exp(boltzmann * delta) * temperature;
         };
         if (delta >= 0 or bernoulli_distribution(probability())(gen)) {
             if (delta < 0) cerr << "iteration = " << iteration << ": delta = " << delta << endl;
-            sln = next_sln;
             if (highscore < sln.get_raw_score()) {
                 highscore = sln.get_raw_score();
                 answer = sln.get_answer();
