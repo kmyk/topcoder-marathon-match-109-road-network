@@ -388,23 +388,6 @@ public:
         swap(this->m_route_sum_p, other.m_route_sum_p);
     }
 
-    tuple<int, vector<int>, vector<vector<int> > > get_compressed_graph() {
-        auto const & N = param->N;
-        int size = 0;
-        vector<int> component_of(N, -1);
-        vector<vector<int> > vertices_of;
-        REP (a, N) {
-            int b = uft.find_root(a);
-            if (component_of[b] == -1) {
-                component_of[b] = (size ++);
-                vertices_of.emplace_back();
-            }
-            component_of[a] = component_of[b];
-            vertices_of[component_of[a]].push_back(a);
-        }
-        return make_tuple(size, component_of, vertices_of);
-    }
-
     ll get_raw_score() {
         return sum_p * get_route_sum_p();
     }
@@ -533,57 +516,56 @@ public:
     }
 };
 
-tuple<vector<int>, ll, double> find_nice_path_for_route(parameters const & param, route_t const & route, int size, vector<int> const & component_of, vector<vector<int> > const & vertices_of) {
+tuple<vector<int>, ll, double> find_nice_path_for_route(parameters const & param, solution & sln, route_t const & route) {
+    auto const & N = param.N;
     auto const & edges = param.edges;
     auto const & edges_of = param.edges_of;
+    auto & uft = sln.uft;
 
-    if (component_of[route.a] == component_of[route.b]) {
+    if (uft.is_same(route.a, route.b)) {
         return make_tuple(vector<int>(), 0, - INFINITY);
     }
 
     // Dijkstra
-    vector<int> parent(size, -1);
-    vector<int> path_edge(size, -1);
-    vector<ll> sum_p(size, LLONG_MIN);
-    vector<ll> sum_m(size, LLONG_MAX);
+    vector<int> parent(N, -1);
+    vector<int> path_edge(N, -1);
+    vector<bool> fixed(N);
+    vector<ll> sum_p(N, LLONG_MIN);
+    vector<ll> sum_m(N, LLONG_MAX);
     reversed_priority_queue<pair<ll, int> > que;
-    sum_p[component_of[route.a]] = 0;
-    sum_m[component_of[route.a]] = 0;
-    que.emplace(0, component_of[route.a]);
+    sum_p[route.a] = 0;
+    sum_m[route.a] = 0;
+    que.emplace(0, route.a);
     while (not que.empty()) {
-        ll sum_m_x; int x; tie(sum_m_x, x) = que.top();
+        ll sum_m_a; int a; tie(sum_m_a, a) = que.top();
         que.pop();
-        if (x == component_of[route.b]) break;
-        if (sum_m[x] < sum_m_x) continue;
+        if (a == route.b) break;
+        if (sum_m[a] < sum_m_a) continue;
 
-        for (int a : vertices_of[x]) {
-            for (int i : edges_of[a]) {
-                int b = (a ^ edges[i].a ^ edges[i].b);
-                int y = component_of[b];
-                if (x == y) continue;
-                ll sum_m_y = sum_m[x] + edges[i].m;
-                if (sum_m_y < sum_m[y]) {
-                    sum_m[y] = sum_m_y;
-                    sum_p[y] = sum_p[x] + edges[i].p;
-                    parent[y] = x;
-                    path_edge[y] = i;
-                    que.emplace(sum_m_y, y);
-                }
+        for (int i : edges_of[a]) {
+            int b = opposite(a, edges[i]);
+            ll sum_m_b = sum_m[a] + (uft.is_same(a, b) ? 0 : edges[i].m);
+            if (sum_m_b < sum_m[b]) {
+                sum_m[b] = sum_m_b;
+                sum_p[b] = sum_p[a] + (uft.is_same(a, b) ? 0 : edges[i].p);
+                parent[b] = (uft.is_same(a, b) ? parent[a] : a);
+                path_edge[b] = (uft.is_same(a, b) ? path_edge[a] : i);
+                que.emplace(sum_m_b, b);
             }
         }
     }
-    assert (sum_m[component_of[route.b]] != LLONG_MAX);
+    assert (sum_m[route.b] != LLONG_MAX);
 
     // reconstruct path
     vector<int> path;
-    for (int x = component_of[route.b]; path_edge[x] != -1; x = parent[x]) {
-        path.push_back(path_edge[x]);
+    for (int b = route.b; path_edge[b] != -1; b = parent[b]) {
+        path.push_back(path_edge[b]);
     }
     reverse(ALL(path));
 
-    double value = (double)(sum_p[component_of[route.b]] + route.p) / sum_m[component_of[route.b]];
+    double value = (double)(sum_p[route.b] + route.p) / sum_m[route.b];
 
-    return make_tuple(path, sum_m[component_of[route.b]], value);
+    return make_tuple(path, sum_m[route.b], value);
 }
 
 template <class Generator>
@@ -592,12 +574,10 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
     vector<int> answer;
     ll highscore = 0;
 
-    solution cur(&param);
+    vector<int> cur;  // routes
+    vector<int> incompleted_routes(R);
+    iota(ALL(incompleted_routes), 0);
     ll score = 0;
-    int size; vector<int> component_of; vector<vector<int> > vertices_of;
-    tie(size, component_of, vertices_of) = cur.get_compressed_graph();
-
-    solution nxt(&param);
 
     double temperature = 1;
     for (unsigned iteration = 0; ; ++ iteration) {
@@ -609,75 +589,45 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
             }
         }
 
-        vector<int> added;
-        vector<int> removed;
         double p = uniform_real_distribution<double>()(gen);
-        if (p < 0.1) {
-            nxt.reset();
-            for (int i : cur.answer) {
-                nxt.use(i);
-            }
-            nxt.remove_unnecessary_edges();
-        } else if (p < 0.3 and not cur.answer.empty()) {
-            int j = choose(cur.answer, gen);
-            auto const & triangles = param.triangles;
-            auto & triangles_of = param.triangles_of;
-            if (triangles_of[j].empty()) continue;
-            auto const & triangle = triangles[choose(triangles_of[j], gen)];
-            for (int i : triangle) {
-                (cur.used[i] ? removed : added).push_back(i);
-            }
-        } else if (p < 0.5 and not cur.answer.empty()) {
-            int j = choose(cur.answer, gen);
-            auto const & quadrangles = param.quadrangles;
-            auto & quadrangles_of = param.quadrangles_of;
-            if (quadrangles_of[j].empty()) continue;
-            auto const & quadrangle = quadrangles[choose(quadrangles_of[j], gen)];
-            for (int i : quadrangle) {
-                (cur.used[i] ? removed : added).push_back(i);
-            }
+        vector<int> nxt_relaxed;
+        if (p < 0.3) {
+            nxt_relaxed = cur;
+            shuffle(ALL(nxt_relaxed), gen);
         } else {
-            int i = uniform_int_distribution<int>(0, R - 1)(gen);
-            tie(added, ignore, ignore) = find_nice_path_for_route(param, routes[i], size, component_of, vertices_of);
+            int i = choose(incompleted_routes, gen);
+            int j = uniform_int_distribution<int>(0, cur.size())(gen);
+            copy(cur.begin(), cur.begin() + j, back_inserter(nxt_relaxed));
+            nxt_relaxed.push_back(i);
+            copy(cur.begin() + j, cur.end(), back_inserter(nxt_relaxed));
         }
 
-        if (not added.empty() or not removed.empty()) {
-            nxt.reset();
-            for (int i : added) {
-                if (nxt.sum_m + edges[i].m > NM) continue;
-                nxt.use(i);
-            }
-            shuffle(ALL(cur.answer), gen);
-            for (int i : cur.answer) {
-                if (not count(ALL(removed), i)) {
-                    if (nxt.sum_m + edges[i].m > NM) continue;
-                    nxt.use(i);
+        solution sln(&param);
+        vector<int> nxt;
+        for (int i : nxt_relaxed) {
+            vector<int> path; ll sum_m;
+            tie(path, sum_m, ignore) = find_nice_path_for_route(param, sln, routes[i]);
+            nxt.push_back(i);
+            if (sln.sum_m + sum_m <= NM) {
+                for (int j : path) {
+                    sln.use(j);
                 }
             }
         }
+        sln.add_edges_greedily();
 
-        vector<int> nxt_answer = nxt.answer;
-        int greedily_added = nxt.add_edges_greedily();
-        ll delta = nxt.get_raw_score() - score;
+        ll delta = sln.get_raw_score() - score;
         auto probability = [&]() {
             double boltzmann = 3.0 / sqrt(1 + highscore);
             return exp(boltzmann * delta / temperature);
         };
         if (delta >= 0 or bernoulli_distribution(probability())(gen)) {
             if (delta < 0) cerr << "iteration = " << iteration << ": delta = " << delta << endl;
-            if (not greedily_added) {
-                cur.swap_(nxt);
-            } else {
-                cur.reset();
-                for (int i : nxt_answer) {
-                    cur.use(i);
-                }
-            }
-            score = nxt.get_raw_score();
-            tie(size, component_of, vertices_of) = cur.get_compressed_graph();  // update
+            cur.swap(nxt);
+            score = sln.get_raw_score();
             if (highscore < score) {
                 highscore = score;
-                answer = nxt.answer;
+                answer = sln.answer;
                 cerr << "iteration = " << iteration << ": highscore = " << highscore << endl;
             }
         }

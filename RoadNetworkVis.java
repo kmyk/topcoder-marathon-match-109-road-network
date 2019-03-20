@@ -4,6 +4,7 @@ import java.awt.image.*;
 import java.io.*;
 import java.security.*;
 import java.util.*;
+import javax.imageio.*;
 import javax.swing.*;
 
 
@@ -392,6 +393,7 @@ loop:
     static boolean showNumbers;
     static boolean Debug;
     static boolean json;
+    static String save;
     static Process proc;
     InputStream is;
     OutputStream os;
@@ -424,9 +426,10 @@ loop:
         if (!vis) return;
         v.repaint();
     }
-    // -----------------------------------------
-    public class Vis extends JPanel implements MouseListener, WindowListener {
-        public void paint(Graphics g) {
+    public BufferedImage getBufferedImage() {
+            BufferedImage bi = new BufferedImage(Width + extraW, Height + extraH, BufferedImage.TYPE_INT_RGB);
+            if (isInRouteCompleted == null) return bi;
+            Graphics g = bi.getGraphics();
             
             // background
             g.setColor(new Color(0xDDDDDD));
@@ -438,22 +441,22 @@ loop:
             double ratioY=1.0/H*Height;
             
             
-            boolean[] isInRouteFailed=new boolean[N];
+            boolean[] cityInRouteCompleted=new boolean[N];
+            boolean[] cityInRouteFailed=new boolean[N];
             for (int i=0; i<NumRoutes; i++)
             {
               Edge r=Routes[i];
-              if (isInRouteCompleted != null && !isInRouteCompleted[i]) {
-                isInRouteFailed[r.a]=true;
-                isInRouteFailed[r.b]=true;
+              if (isInRouteCompleted[i]) {
+                cityInRouteCompleted[r.a]=true;
+                cityInRouteCompleted[r.b]=true;
+              } else {
+                cityInRouteFailed[r.a]=true;
+                cityInRouteFailed[r.b]=true;
               }
             }
             
-            boolean[] cityInReturn=new boolean[N];
             boolean[] edgeInReturn=new boolean[Edges.size()];
             for (int i : Ret) {
-              Edge r=Edges.get(i);
-              cityInReturn[r.a]=true;
-              cityInReturn[r.b]=true;
               edgeInReturn[i]=true;
             }
            
@@ -463,7 +466,7 @@ loop:
             for (int i=0; i<NumRoutes; i++)
             {
               Edge r=Routes[i];
-              if (isInRouteCompleted != null && isInRouteCompleted[i]) g2.setColor(Color.GREEN);
+              if (isInRouteCompleted[i]) g2.setColor(Color.GREEN);
               else g2.setColor(Color.RED);
               Stroke dashed = new BasicStroke(1, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0, new float[]{1,3}, 0);
               g2.setStroke(dashed);
@@ -497,11 +500,15 @@ loop:
             //cities
             for (int i=0; i<N; i++)
             {
-              if (isInRouteFailed[i]) g.setColor(Color.RED);
-              else if (cityInReturn[i]) g.setColor(Color.GREEN);
+              if (cityInRouteCompleted[i]) g.setColor(Color.GREEN);
+              else if (cityInRouteFailed[i]) g.setColor(Color.RED);
               else g.setColor(Color.BLUE);
               
               g.fillOval((int)((CityX[i]-CitySize/2)*ratioX),(int)((CityY[i]-CitySize/2)*ratioY),(int)(CitySize*ratioX),(int)(CitySize*ratioY));
+              if (cityInRouteFailed[i] && cityInRouteCompleted[i]) {
+                g.setColor(Color.RED);
+                g.fillArc((int)((CityX[i]-CitySize/2)*ratioX),(int)((CityY[i]-CitySize/2)*ratioY),(int)(CitySize*ratioX),(int)(CitySize*ratioY), 30, 210);
+              }
               
               if (showNumbers)
               {
@@ -515,10 +522,18 @@ loop:
             g.setColor(Color.BLACK);
             g.setFont(new Font("Arial",Font.BOLD,14));
             g.drawString(String.format("Routes completed: %d / %d", RoutesCompleted, Routes.length), Width+25, 30);
-            //g.drawString(String.format("Routes failed: %d", RoutesFailed), Width+25, 60);
-            g.drawString(String.format("Routes score: %d", RouteScore), Width+25, 90);
-            g.drawString(String.format("Connections score: %d", EdgeScore), Width+25, 120);
-            g.drawString(String.format("SCORE: %d", RouteScore*1L*EdgeScore), Width+25, 150);
+            g.drawString(String.format("Materials used: %d / %d", MaterialsUsed, NumMaterials), Width+25, 60);
+            g.drawString(String.format("Routes score: %d", RouteScore), Width+25, 120);
+            g.drawString(String.format("Connections score: %d", EdgeScore), Width+25, 150);
+            g.drawString(String.format("SCORE: %d", RouteScore*1L*EdgeScore), Width+25, 180);
+
+            return bi;
+    }
+    // -----------------------------------------
+    public class Vis extends JPanel implements MouseListener, WindowListener {
+        public void paint(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.drawImage(getBufferedImage(), null, 0, 0);
         }
         // -------------------------------------
         public Vis() {
@@ -607,6 +622,16 @@ loop:
           System.out.print("}");
           System.out.println("}");
         }
+
+        if (save != null) {
+          BufferedImage bi = getBufferedImage();
+          try {
+            ImageIO.write(bi, "png", new File(save));
+          } catch (Exception e) { e.printStackTrace(); }
+        }
+        if (vis) {
+          draw();
+        }
       }
       catch (Exception e) { e.printStackTrace(); }
     }
@@ -659,6 +684,7 @@ loop:
         showNumbers = false;
         Debug = false;
         json = false;
+        save = null;
         for (int i = 0; i<args.length; i++)
         {   if (args[i].equals("-seed"))
                 seed = args[++i];
@@ -672,6 +698,8 @@ loop:
                 Debug = true;                                
             if (args[i].equals("-json"))
                 json = true;
+            if (args[i].equals("-save"))
+                save = args[++i];
             if (args[i].equals("-width"))
                 Width = Integer.parseInt(args[++i]);
             if (args[i].equals("-height"))
