@@ -85,6 +85,55 @@ struct route_t {
     ll p;
 };
 
+int opposite(int a, connection_t const & edge) {
+    return a ^ edge.a ^ edge.b;
+}
+
+template <class Container, class Generator>
+typename Container::value_type const & choose(Container const & a, Generator & gen) {
+    assert (not a.empty());
+    int i = uniform_int_distribution<int>(0, a.size() - 1)(gen);
+    return a[i];
+}
+
+vector<array<int, 3> > list_triangles(int E, vector<connection_t> const & edges, vector<vector<int> > const & edges_of) {
+    vector<array<int, 3> > triangles;
+    REP (i, E) {
+        for (int j : edges_of[edges[i].a]) if (i < j) {
+            int c1 = opposite(edges[i].a, edges[j]);
+            for (int k : edges_of[edges[i].b]) if (j < k) {
+                int c2 = opposite(edges[i].b, edges[k]);
+                if (c1 == c2) {
+                    triangles.push_back({ i, j, k });
+                }
+            }
+        }
+    }
+    return triangles;
+}
+
+vector<array<int, 4> > list_quadrangles(int E, vector<connection_t> const & edges, vector<vector<int> > const & edges_of) {
+    vector<array<int, 4> > quadrangles;
+    REP (i, E) {
+        int a = edges[i].a;
+        int b = edges[i].b;
+        for (int j : edges_of[b]) if (i < j) {
+            int c = opposite(b, edges[j]);
+            for (int k : edges_of[c]) if (i < k and j < k) {
+                int d1 = opposite(c, edges[k]);
+                for (int l : edges_of[a]) if (i < l and l != j and l != k) {
+                    int d2 = opposite(a, edges[l]);
+                    if (d1 == d2) {
+                        quadrangles.push_back({ i, j, k, l });
+                    }
+                }
+            }
+        }
+    }
+    return quadrangles;
+}
+
+
 struct parameters {
     ll NM;
     int N;
@@ -95,6 +144,11 @@ struct parameters {
 
     vector<vector<int> > edges_of;
     vector<vector<int> > routes_of;
+
+    vector<array<int, 3> > triangles;
+    vector<array<int, 4> > quadrangles;
+    vector<vector<int> > triangles_of;
+    vector<vector<int> > quadrangles_of;
 
     parameters(ll NM_, int N_, int E_, vector<connection_t> const & edges_, int R_, vector<route_t> const & routes_)
             : NM(NM_), N(N_), E(E_), edges(edges_), R(R_), routes(routes_) {
@@ -121,6 +175,32 @@ struct parameters {
             routes_of[routes[i].a].push_back(i);
             routes_of[routes[i].b].push_back(i);
         }
+
+        triangles = list_triangles(E, edges, edges_of);
+        triangles_of.resize(N);
+        REP (i, triangles.size()) {
+            vector<int> nodes;
+            for (int j : triangles[i]) {
+                nodes.push_back(edges[j].a);
+                nodes.push_back(edges[j].b);
+            }
+            for (int a : nodes) {
+                triangles_of[a].push_back(i);
+            }
+        }
+
+        quadrangles = list_quadrangles(E, edges, edges_of);
+        quadrangles_of.resize(N);
+        REP (i, quadrangles.size()) {
+            vector<int> nodes;
+            for (int j : quadrangles[i]) {
+                nodes.push_back(edges[j].a);
+                nodes.push_back(edges[j].b);
+            }
+            for (int a : nodes) {
+                quadrangles_of[a].push_back(i);
+            }
+        }
     }
 
     int find_edge(int a, int b) {
@@ -136,10 +216,12 @@ struct solution {
     const parameters *param;
 
     // the state of solution
+    vector<int> answer;
     vector<bool> used;
     ll used_sum_p;
     ll used_sum_m;
     union_find_tree used_uft;
+    vector<int> used_nodes;
     ll m_raw_score;
 
     solution(const parameters *param_)
@@ -162,22 +244,18 @@ struct solution {
         if (used[i]) return;
         assert (used_sum_m + edges[i].m <= NM);
 
+        auto const & edge = edges[i];
+        answer.push_back(i);
         used[i] = true;
-        used_sum_p += edges[i].p;
-        used_sum_m += edges[i].m;
-        used_uft.unite_trees(edges[i].a, edges[i].b);
-        m_raw_score = -1;
-    }
-
-    vector<int> get_answer() const {
-        auto const & E = param->E;
-        vector<int> answer;
-        REP (i, E) {
-            if (used[i]) {
-                answer.push_back(i);
+        used_sum_p += edge.p;
+        used_sum_m += edge.m;
+        for (int c : { edge.a, edge.b }) {
+            if (used_uft.tree_size(c) == 1) {
+                used_nodes.push_back(c);
             }
         }
-        return answer;
+        used_uft.unite_trees(edge.a, edge.b);
+        m_raw_score = -1;
     }
 
     tuple<int, vector<int>, vector<vector<int> > > get_compressed_graph() {
@@ -285,7 +363,7 @@ template <class Generator>
 vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes, double clock_begin, Generator & gen) {
     parameters param(NM, N, E, edges, R, routes);
     vector<int> answer;
-    ll highscore = LLONG_MIN;
+    ll highscore = 0;
 
     solution sln(&param);
     int size; vector<int> component_of; vector<vector<int> > vertices_of;
@@ -300,40 +378,45 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
             }
         }
 
-        vector<int> path;
-        ll sum_m;
-        if (bernoulli_distribution(0.2)(gen)) {
-            int i = uniform_int_distribution<int>(0, E - 1)(gen);
-            path.push_back(i);
-            sum_m = (sln.used[i] ? 0 : edges[i].m);
+        vector<int> added;
+        vector<int> removed;
+        double p = uniform_real_distribution<double>()(gen);
+        if (p < 0.3 and not sln.used_nodes.empty()) {
+            int a = choose(sln.used_nodes, gen);
+            if (param.triangles_of[a].empty()) continue;
+            auto const & triangle = param.triangles[choose(param.triangles_of[a], gen)];
+            for (int i : triangle) {
+                (sln.used[i] ? removed : added).push_back(i);
+            }
+        } else if (p < 0.6 and not sln.used_nodes.empty()) {
+            int a = choose(sln.used_nodes, gen);
+            if (param.quadrangles_of[a].empty()) continue;
+            auto const & quadrangle = param.quadrangles[choose(param.quadrangles_of[a], gen)];
+            for (int i : quadrangle) {
+                (sln.used[i] ? removed : added).push_back(i);
+            }
         } else {
             int i = uniform_int_distribution<int>(0, R - 1)(gen);
-            tie(path, sum_m, ignore) = find_nice_path_for_route(param, routes[i], size, component_of, vertices_of);
+            tie(added, ignore, ignore) = find_nice_path_for_route(param, routes[i], size, component_of, vertices_of);
         }
 
-        solution next_sln = sln;
-        if (0 < sum_m and sln.used_sum_m + sum_m <= NM) {
-            for (int i : path) {
+        solution next_sln(&param);
+        for (int i : added) {
+            if (next_sln.used_sum_m + edges[i].m > NM) continue;
+            next_sln.use(i);
+        }
+        shuffle(ALL(sln.answer), gen);
+        for (int i : sln.answer) {
+            if (not count(ALL(removed), i)) {
+                if (next_sln.used_sum_m + edges[i].m > NM) continue;
                 next_sln.use(i);
-            }
-        } else {
-            vector<int> order = path;
-            REP (i, E) if (sln.used[i]) {
-                order.push_back(i);
-            }
-            shuffle(order.begin() + path.size(), order.end(), gen);
-            next_sln = solution(&param);
-            for (int i : order) {
-                if (next_sln.used_sum_m + edges[i].m <= NM) {
-                    next_sln.use(i);
-                }
             }
         }
 
         ll delta = next_sln.get_raw_score() - sln.get_raw_score();
         auto probability = [&]() {
-            constexpr double boltzmann = 0.01;
-            return exp(boltzmann * delta) * temperature;
+            double boltzmann = 1.0 / sqrt(1 + highscore);
+            return exp(boltzmann * delta / temperature);
         };
         if (delta >= 0 or bernoulli_distribution(probability())(gen)) {
             if (delta < 0) cerr << "iteration = " << iteration << ": delta = " << delta << endl;
@@ -341,7 +424,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
             tie(size, component_of, vertices_of) = sln.get_compressed_graph();
             if (highscore < sln.get_raw_score()) {
                 highscore = sln.get_raw_score();
-                answer = sln.get_answer();
+                answer = sln.answer;
                 cerr << "iteration = " << iteration << ": highscore = " << highscore << endl;
             }
         }
