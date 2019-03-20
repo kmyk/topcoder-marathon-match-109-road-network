@@ -338,6 +338,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
         if (delta >= 0 or bernoulli_distribution(probability())(gen)) {
             if (delta < 0) cerr << "iteration = " << iteration << ": delta = " << delta << endl;
             sln = next_sln;
+            tie(size, component_of, vertices_of) = sln.get_compressed_graph();
             if (highscore < sln.get_raw_score()) {
                 highscore = sln.get_raw_score();
                 answer = sln.get_answer();
