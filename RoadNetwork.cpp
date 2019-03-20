@@ -3,6 +3,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdlib>
+#include <functional>
 #include <iostream>
 #include <iterator>
 #include <map>
@@ -21,6 +22,8 @@
 using ll = long long;
 using namespace std;
 template <class T> using reversed_priority_queue = priority_queue<T, vector<T>, greater<T> >;
+template <class T, class U> inline void chmax(T & a, U const & b) { a = max<T>(a, b); }
+template <class T, class U> inline void chmin(T & a, U const & b) { a = min<T>(a, b); }
 
 
 constexpr double ticks_per_sec = 2800000000;
@@ -57,6 +60,7 @@ private:
 
 struct union_find_tree {
     vector<int> data;
+    vector<int> non_isolated;
     union_find_tree() = default;
     explicit union_find_tree(size_t n) : data(n, -1) {}
     bool is_root(int i) { return data[i] < 0; }
@@ -64,6 +68,8 @@ struct union_find_tree {
     int tree_size(int i) { return - data[find_root(i)]; }
     int unite_trees(int i, int j) {
         i = find_root(i); j = find_root(j);
+        if (tree_size(i) == 1) non_isolated.push_back(i);
+        if (tree_size(j) == 1) non_isolated.push_back(j);
         if (i != j) {
             if (tree_size(i) < tree_size(j)) swap(i,j);
             data[i] += data[j];
@@ -72,8 +78,22 @@ struct union_find_tree {
         return i;
     }
     bool is_same(int i, int j) { return find_root(i) == find_root(j); }
+    vector<int> const & list_non_isolated() { return non_isolated; }
+    void reset() {
+        for (int i : non_isolated) {
+            data[i] = -1;
+        }
+        non_isolated.clear();
+    }
+    void swap_(union_find_tree & other) {
+        this->data.swap(other.data);
+        this->non_isolated.swap(other.non_isolated);
+    }
 };
 
+
+constexpr int MIN_N = 30;
+constexpr int MAX_N = 1000;
 
 struct connection_t {
     int a, b;
@@ -142,8 +162,13 @@ struct parameters {
     int R;
     vector<route_t> routes;
 
+    vector<int> greedy_order;
+
     vector<vector<int> > edges_of;
     vector<vector<int> > routes_of;
+
+    vector<vector<ll> > dist;
+    vector<vector<int> > reconstruct;  // `reconstruct[a][b]` is the parent node of `b` on a shortest-path tree from `a`
 
     vector<array<int, 3> > triangles;
     vector<array<int, 4> > quadrangles;
@@ -152,6 +177,12 @@ struct parameters {
 
     parameters(ll NM_, int N_, int E_, vector<connection_t> const & edges_, int R_, vector<route_t> const & routes_)
             : NM(NM_), N(N_), E(E_), edges(edges_), R(R_), routes(routes_) {
+        vector<int> greedy_order(E);
+        iota(ALL(greedy_order), 0);
+        sort(ALL(greedy_order), [&](int i, int j) {
+            return edges[i].p * edges[j].m > edges[j].p * edges[i].m;
+        });
+
         for (auto & edge : edges) {
             if (edge.a > edge.b) {
                 swap(edge.a, edge.b);
@@ -176,30 +207,52 @@ struct parameters {
             routes_of[routes[i].b].push_back(i);
         }
 
-        triangles = list_triangles(E, edges, edges_of);
-        triangles_of.resize(N);
-        REP (i, triangles.size()) {
-            vector<int> nodes;
-            for (int j : triangles[i]) {
-                nodes.push_back(edges[j].a);
-                nodes.push_back(edges[j].b);
-            }
-            for (int a : nodes) {
-                triangles_of[a].push_back(i);
+
+        // Warshall-Floyd
+        dist.resize(N, vector<ll>(N, LLONG_MAX / 3));
+        REP (a, N) {
+            dist[a][a] = 0;
+        }
+        for (auto const & edge : edges) {
+            dist[edge.a][edge.b] = edge.m;
+            dist[edge.b][edge.a] = edge.m;
+        }
+        REP (c, N) {
+            REP (a, N) if (dist[c][a] != LLONG_MAX / 3) {
+                REP (b, N) {
+                    chmin(dist[a][b], dist[a][c] + dist[c][b]);
+                }
             }
         }
 
+        reconstruct.resize(N, vector<int>(N, -1));
+        REP (a, N) {
+            REP (b, N) if (b != a) {
+                for (int i : edges_of[b]) {
+                    int c = opposite(b, edges[i]);
+                    if (dist[a][c] + edges[i].m == dist[a][b]) {
+                        reconstruct[a][b] = c;
+                        break;
+                    }
+                }
+            }
+        }
+
+        triangles = list_triangles(E, edges, edges_of);
+        triangles_of.resize(E);
+        REP (i, triangles.size()) {
+            triangles_of[triangles[i][0]].push_back(i);
+            triangles_of[triangles[i][1]].push_back(i);
+            triangles_of[triangles[i][2]].push_back(i);
+        }
+
         quadrangles = list_quadrangles(E, edges, edges_of);
-        quadrangles_of.resize(N);
+        quadrangles_of.resize(E);
         REP (i, quadrangles.size()) {
-            vector<int> nodes;
-            for (int j : quadrangles[i]) {
-                nodes.push_back(edges[j].a);
-                nodes.push_back(edges[j].b);
-            }
-            for (int a : nodes) {
-                quadrangles_of[a].push_back(i);
-            }
+            quadrangles_of[quadrangles[i][0]].push_back(i);
+            quadrangles_of[quadrangles[i][1]].push_back(i);
+            quadrangles_of[quadrangles[i][2]].push_back(i);
+            quadrangles_of[quadrangles[i][3]].push_back(i);
         }
     }
 
@@ -212,17 +265,63 @@ struct parameters {
     }
 };
 
+/**
+ * @note O((|X| + R) \alpha(|X|)) for the answer X
+ */
+vector<int> list_completed_routes(parameters const & param, vector<int> const & answer) {
+    static union_find_tree uft(MAX_N);
+    auto const & edges = param.edges;
+    auto const & R = param.R;
+    auto const & routes = param.routes;
+
+    vector<int> completed;
+    for (int i : answer) {
+        auto const & edge = edges[i];
+        uft.unite_trees(edge.a, edge.b);
+    }
+    REP (i, R) {
+        if (uft.is_same(routes[i].a, routes[i].b)) {
+            completed.push_back(i);
+        }
+    }
+    uft.reset();
+    return completed;
+}
+
 struct solution {
     const parameters *param;
 
     // the state of solution
     vector<int> answer;
-    vector<bool> used;
-    ll used_sum_p;
-    ll used_sum_m;
-    union_find_tree used_uft;
-    vector<int> used_nodes;
-    ll m_raw_score;
+    vector<bool> used;  // edges
+    ll sum_p;
+    ll sum_m;
+    union_find_tree uft;
+    vector<bool> used_node;
+
+private:
+    vector<int> m_completed;  // routes
+    ll m_route_sum_p;
+
+    vector<int> const & get_completed() {
+        auto const & routes = param->routes;
+        if (m_route_sum_p != -1) {
+            return m_completed;
+        }
+        m_completed = list_completed_routes(*param, answer);
+        m_route_sum_p = 0;
+        for (int i : m_completed) {
+            m_route_sum_p += routes[i].p;
+        }
+        return m_completed;
+    }
+
+    ll get_route_sum_p() {
+        get_completed();
+        return m_route_sum_p;
+    }
+
+public:
 
     solution(const parameters *param_)
             : param(param_) {
@@ -230,10 +329,11 @@ struct solution {
         auto const & N = param->N;
         auto const & E = param->E;
         used.resize(E);
-        used_sum_p = 0;
-        used_sum_m = 0;
-        used_uft = union_find_tree(N);
-        m_raw_score = -1;
+        sum_p = 0;
+        sum_m = 0;
+        uft = union_find_tree(N);
+        used_node.resize(N);
+        m_route_sum_p = 0;
     }
 
     void use(int i) {
@@ -242,20 +342,50 @@ struct solution {
         auto const & edges = param->edges;
         assert (0 <= i and i <= E);
         if (used[i]) return;
-        assert (used_sum_m + edges[i].m <= NM);
+        assert (sum_m + edges[i].m <= NM);
 
         auto const & edge = edges[i];
         answer.push_back(i);
         used[i] = true;
-        used_sum_p += edge.p;
-        used_sum_m += edge.m;
+        sum_p += edge.p;
+        sum_m += edge.m;
         for (int c : { edge.a, edge.b }) {
-            if (used_uft.tree_size(c) == 1) {
-                used_nodes.push_back(c);
+            if (not used_node[c]) {
+                used_node[c] = true;
             }
         }
-        used_uft.unite_trees(edge.a, edge.b);
-        m_raw_score = -1;
+        uft.unite_trees(edge.a, edge.b);
+        m_completed.clear();
+        m_route_sum_p = -1;
+    }
+
+    void reset() {
+        for (int i : answer) {
+            used[i] = false;
+        }
+        answer.clear();
+        sum_p = 0;
+        sum_m = 0;
+        for (int a : uft.list_non_isolated()) {
+            used_node[a] = false;
+        }
+        uft.reset();
+        m_completed.clear();
+        m_route_sum_p = 0;
+    }
+
+    void swap_(solution & other) {
+        swap(this->param, other.param);
+
+        this->answer.swap(other.answer);
+        this->used.swap(other.used);
+        swap(this->sum_p, other.sum_p);
+        swap(this->sum_m, other.sum_m);
+        this->uft.swap_(other.uft);
+        this->used_node.swap(other.used_node);
+
+        this->m_completed.swap(other.m_completed);
+        swap(this->m_route_sum_p, other.m_route_sum_p);
     }
 
     tuple<int, vector<int>, vector<vector<int> > > get_compressed_graph() {
@@ -264,7 +394,7 @@ struct solution {
         vector<int> component_of(N, -1);
         vector<vector<int> > vertices_of;
         REP (a, N) {
-            int b = used_uft.find_root(a);
+            int b = uft.find_root(a);
             if (component_of[b] == -1) {
                 component_of[b] = (size ++);
                 vertices_of.emplace_back();
@@ -276,15 +406,130 @@ struct solution {
     }
 
     ll get_raw_score() {
+        return sum_p * get_route_sum_p();
+    }
+
+    void remove_unnecessary_edges() {
+        struct state_t {
+            ll p, m;
+            int parent;
+            int edge;
+            bool fixed;
+        };
+        static vector<bool> original_used;
+        static vector<state_t> dist(MAX_N, { -1ll, 1ll, -1, -1, false });
+        static vector<int> dist_used;
+        auto const & E = param->E;
+        auto const & edges = param->edges;
         auto const & routes = param->routes;
-        if (m_raw_score != -1) return m_raw_score;
-        ll used_route_sum_p = 0;
-        for (auto const & route : routes) {
-            if (used_uft.is_same(route.a, route.b)) {
-                used_route_sum_p += route.p;
+        auto const & edges_of = param->edges_of;
+
+        vector<int> original_nodes = uft.list_non_isolated();
+        vector<int> original_answer = answer;
+        if (original_used.size() < E) {
+            original_used.resize(E, false);
+        }
+        for (int i : original_answer) {
+            original_used[i] = true;
+        }
+        vector<int> completed = get_completed();
+        reset();
+        for (int i : completed) {
+            auto const & route = routes[i];
+            if (uft.is_same(route.a, route.b)) continue;
+
+            // Dijkstra
+            auto cmp = [&](tuple<int, ll, ll> const & a, tuple<int, ll, ll> const & b) {
+                ll a_m, a_p; tie(ignore, a_m, a_p) = a;
+                ll b_m, b_p; tie(ignore, b_m, b_p) = b;
+                return a_p * b_m < b_p * a_m;
+            };
+            priority_queue<tuple<int, ll, ll>, vector<tuple<int, ll, ll> >, decltype(cmp)> que(cmp);
+            function<void (int)> go = [&](int a) {
+                dist[a].fixed = true;
+                for (int i : edges_of[a]) if (original_used[i]) {
+                    auto const & edge = edges[i];
+                    int b = opposite(a, edge);
+                    if (not dist[b].fixed) {
+                        if (uft.is_same(a, b)) {
+                            if (dist[b].p == -1) {
+                                dist_used.push_back(b);
+                            }
+                            dist[b].p = dist[a].p + edge.p;
+                            dist[b].m = dist[a].m + edge.m;
+                            dist[b].parent = dist[a].parent;
+                            dist[b].edge = dist[a].edge;
+                            go(b);
+                        } else if ((dist[a].p + edge.p) * dist[b].m > dist[b].p * (dist[a].m + edge.m)) {
+                            if (dist[b].p == -1) {
+                                dist_used.push_back(b);
+                            }
+                            dist[b].p = dist[a].p + edge.p;
+                            dist[b].m = dist[a].m + edge.m;
+                            dist[b].parent = a;
+                            dist[b].edge = i;
+                            que.emplace(b, dist[b].m, dist[b].p);
+                        }
+                    }
+                }
+            };
+            dist[route.a].p = 0;
+            dist[route.a].m = 0;
+            dist[route.a].parent = -1;
+            dist[route.a].edge = -1;
+            dist_used.push_back(route.a);
+            go(route.a);
+            while (not dist[route.b].fixed) {
+                assert (not que.empty());
+                int a; ll a_m, a_p; tie(a, a_m, a_p) = que.top();
+                que.pop();
+                if (a_p == dist[a].p and a_m == dist[a].m) {
+                    go(a);
+                }
+            }
+
+            // reconstruct
+            for (int a = route.b; dist[a].edge != -1; a = dist[a].parent) {
+                assert (original_used[dist[a].edge]);
+                assert (not used[dist[a].edge]);
+                use(dist[a].edge);
+            }
+
+            // clean up
+            for (int a : dist_used) {
+                dist[a].p = -1;
+                dist[a].m = 1;
+                dist[a].parent = -1;
+                dist[a].edge = -1;
+                dist[a].fixed = false;
+            }
+            dist_used.clear();
+        }
+
+        // clean up
+        for (int i : original_answer) {
+            original_used[i] = false;
+        }
+    }
+
+    int add_edges_greedily() {
+        auto const & NM = param->NM;
+        auto const & edges = param->edges;
+        int succeeded = 0;
+        int failed = 0;
+        for (int i : param->greedy_order) {
+            if (sum_m == NM) break;
+            if (sum_m + edges[i].m <= NM) {
+                if (not used[i]) {
+                    ++ succeeded;
+                    use(i);
+                }
+            } else {
+                ++ failed;
+                if (failed >= 10) break;
             }
         }
-        return m_raw_score = used_sum_p * used_route_sum_p;
+        return succeeded;
     }
 };
 
@@ -341,39 +586,25 @@ tuple<vector<int>, ll, double> find_nice_path_for_route(parameters const & param
     return make_tuple(path, sum_m[component_of[route.b]], value);
 }
 
-solution use_edges_greedily_without_routes(solution sln) {
-    auto const & NM = sln.param->NM;
-    auto const & E = sln.param->E;
-    auto const & edges = sln.param->edges;
-
-    vector<int> order(E);
-    iota(ALL(order), 0);
-    sort(ALL(order), [&](int i, int j) {
-        return edges[i].p * edges[j].m > edges[j].p * edges[i].m;
-    });
-    for (int i : order) {
-        if (not sln.used[i] and sln.used_sum_m + edges[i].m <= NM) {
-            sln.use(i);
-        }
-    }
-    return sln;
-}
-
 template <class Generator>
 vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes, double clock_begin, Generator & gen) {
     parameters param(NM, N, E, edges, R, routes);
     vector<int> answer;
     ll highscore = 0;
 
-    solution sln(&param);
+    solution cur(&param);
+    ll score = 0;
     int size; vector<int> component_of; vector<vector<int> > vertices_of;
-    tie(size, component_of, vertices_of) = sln.get_compressed_graph();
+    tie(size, component_of, vertices_of) = cur.get_compressed_graph();
+
+    solution nxt(&param);
 
     double temperature = 1;
     for (unsigned iteration = 0; ; ++ iteration) {
         if (iteration % 32 == 0) {
             temperature = 1.0 - (rdtsc() - clock_begin) / (TLE * 0.8);
             if (temperature <= 0.0) {
+                cerr << "iteration = " << iteration << ": done" << endl;
                 break;
             }
         }
@@ -381,50 +612,72 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
         vector<int> added;
         vector<int> removed;
         double p = uniform_real_distribution<double>()(gen);
-        if (p < 0.3 and not sln.used_nodes.empty()) {
-            int a = choose(sln.used_nodes, gen);
-            if (param.triangles_of[a].empty()) continue;
-            auto const & triangle = param.triangles[choose(param.triangles_of[a], gen)];
-            for (int i : triangle) {
-                (sln.used[i] ? removed : added).push_back(i);
+        if (p < 0.1) {
+            nxt.reset();
+            for (int i : cur.answer) {
+                nxt.use(i);
             }
-        } else if (p < 0.6 and not sln.used_nodes.empty()) {
-            int a = choose(sln.used_nodes, gen);
-            if (param.quadrangles_of[a].empty()) continue;
-            auto const & quadrangle = param.quadrangles[choose(param.quadrangles_of[a], gen)];
+            nxt.remove_unnecessary_edges();
+        } else if (p < 0.3 and not cur.answer.empty()) {
+            int j = choose(cur.answer, gen);
+            auto const & triangles = param.triangles;
+            auto & triangles_of = param.triangles_of;
+            if (triangles_of[j].empty()) continue;
+            auto const & triangle = triangles[choose(triangles_of[j], gen)];
+            for (int i : triangle) {
+                (cur.used[i] ? removed : added).push_back(i);
+            }
+        } else if (p < 0.5 and not cur.answer.empty()) {
+            int j = choose(cur.answer, gen);
+            auto const & quadrangles = param.quadrangles;
+            auto & quadrangles_of = param.quadrangles_of;
+            if (quadrangles_of[j].empty()) continue;
+            auto const & quadrangle = quadrangles[choose(quadrangles_of[j], gen)];
             for (int i : quadrangle) {
-                (sln.used[i] ? removed : added).push_back(i);
+                (cur.used[i] ? removed : added).push_back(i);
             }
         } else {
             int i = uniform_int_distribution<int>(0, R - 1)(gen);
             tie(added, ignore, ignore) = find_nice_path_for_route(param, routes[i], size, component_of, vertices_of);
         }
 
-        solution next_sln(&param);
-        for (int i : added) {
-            if (next_sln.used_sum_m + edges[i].m > NM) continue;
-            next_sln.use(i);
-        }
-        shuffle(ALL(sln.answer), gen);
-        for (int i : sln.answer) {
-            if (not count(ALL(removed), i)) {
-                if (next_sln.used_sum_m + edges[i].m > NM) continue;
-                next_sln.use(i);
+        if (not added.empty() or not removed.empty()) {
+            nxt.reset();
+            for (int i : added) {
+                if (nxt.sum_m + edges[i].m > NM) continue;
+                nxt.use(i);
+            }
+            shuffle(ALL(cur.answer), gen);
+            for (int i : cur.answer) {
+                if (not count(ALL(removed), i)) {
+                    if (nxt.sum_m + edges[i].m > NM) continue;
+                    nxt.use(i);
+                }
             }
         }
 
-        ll delta = next_sln.get_raw_score() - sln.get_raw_score();
+        vector<int> nxt_answer = nxt.answer;
+        int greedily_added = nxt.add_edges_greedily();
+        ll delta = nxt.get_raw_score() - score;
         auto probability = [&]() {
-            double boltzmann = 1.0 / sqrt(1 + highscore);
+            double boltzmann = 3.0 / sqrt(1 + highscore);
             return exp(boltzmann * delta / temperature);
         };
         if (delta >= 0 or bernoulli_distribution(probability())(gen)) {
             if (delta < 0) cerr << "iteration = " << iteration << ": delta = " << delta << endl;
-            sln = next_sln;
-            tie(size, component_of, vertices_of) = sln.get_compressed_graph();
-            if (highscore < sln.get_raw_score()) {
-                highscore = sln.get_raw_score();
-                answer = sln.answer;
+            if (not greedily_added) {
+                cur.swap_(nxt);
+            } else {
+                cur.reset();
+                for (int i : nxt_answer) {
+                    cur.use(i);
+                }
+            }
+            score = nxt.get_raw_score();
+            tie(size, component_of, vertices_of) = cur.get_compressed_graph();  // update
+            if (highscore < score) {
+                highscore = score;
+                answer = nxt.answer;
                 cerr << "iteration = " << iteration << ": highscore = " << highscore << endl;
             }
         }
@@ -440,7 +693,7 @@ public:
     vector<int> findSolution(int NM, int N, int E, vector<string> edges, int R, vector<string> routes) {
         double clock_begin = rdtsc();
 
-        assert (30 <= N and N <= 1000);
+        assert (MIN_N <= N and N <= MAX_N);
         assert (N - 1 <= E);
         assert (5 <= R and R <= N / 4);
 
