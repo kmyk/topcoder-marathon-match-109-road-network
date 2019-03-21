@@ -526,7 +526,7 @@ public:
     }
 };
 
-void merge_greedily(parameters const & param, vector<bool> const & selected, solution & sln) {
+void merge_greedily(parameters const & param, vector<bool> const & selected, double ratio, solution & sln) {
     auto const & NM = param.NM;
     auto const & edges = param.edges;
     auto const & R = param.R;
@@ -541,15 +541,18 @@ void merge_greedily(parameters const & param, vector<bool> const & selected, sol
     sort(ALL(supernodes));
     supernodes.erase(unique(ALL(supernodes)), supernodes.end());
 
+    constexpr ll INF = 1e9 + 7;
     while (supernodes.size() >= 2) {
         tuple<int, int, int, int> path;
-        ll sum_m = LLONG_MAX;
+        ll sum_p = -1;
+        ll sum_m = INF;
 
         REP (i, supernodes.size()) {
             REP (j, i) {
                 for (int a : supernodes[i]) {
                     for (int b : supernodes[j]) {
-                        if (param.dist_m[a][b] < sum_m) {
+                        if ((1 + ratio * sum_p) * param.dist_m[a][b] < (1 + ratio * param.dist_p[a][b]) * sum_m) {
+                            sum_p = param.dist_p[a][b];
                             sum_m = param.dist_m[a][b];
                             path = make_tuple(i, j, a, b);
                         }
@@ -557,7 +560,7 @@ void merge_greedily(parameters const & param, vector<bool> const & selected, sol
                 }
             }
         }
-        if (sum_m == LLONG_MAX or sln.sum_m + sum_m > NM) break;
+        if (sln.sum_m + sum_m > NM) break;
 
         int i, j, a, b; tie(i, j, a, b) = path;
         if (supernodes[i].size() < supernodes[j].size()) {
@@ -601,10 +604,11 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
             selected[i] = true;
         }
     }
+    double ratio = 0.05;
     ll score = -1;
     while (score == -1) {
         sln.reset();
-        merge_greedily(param, selected, sln);
+        merge_greedily(param, selected, ratio, sln);
         if (sln.get_completed().size() < count(ALL(selected), true)) {
             REP (i, R) if (selected[i]) {
                 selected[i] = bernoulli_distribution(0.9)(gen);
@@ -618,33 +622,47 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
 
     double temperature = 1;
     for (unsigned iteration = 0; ; ++ iteration) {
-        temperature = 1.0 - (rdtsc() - clock_begin) / (TLE * 0.9);
+        temperature = 1.0 - (rdtsc() - clock_begin) / (TLE * 0.95);
         if (temperature <= 0.0) {
             cerr << "iteration = " << iteration << " : done" << endl;
             break;
         }
 
         // choose a neighborhood
-        int i = uniform_int_distribution<int>(0, R - 1)(gen);
-        int j = (selected[i] and bernoulli_distribution(0.8)(gen) ? uniform_int_distribution<int>(0, R - 1)(gen) : -1);
-        selected[i] = not selected[i];
+        int i = -1;
+        int j = -1;
+        double next_ratio = ratio;
+        if (bernoulli_distribution(0.95)(gen)) {
+            i = uniform_int_distribution<int>(0, R - 1)(gen);
+            if (selected[i] and bernoulli_distribution(0.8)(gen)) {
+                int j1 = uniform_int_distribution<int>(0, R - 1)(gen);
+                j = j1;
+                while (j < R and selected[j]) ++ j;
+                if (j == R) j = 0;
+                while (j < j1 and selected[j]) ++ j;
+            }
+        } else {
+            next_ratio *= uniform_real_distribution<double>(0.8, 1.2)(gen);
+        }
+        if (i != -1) selected[i] = not selected[i];
         if (j != -1) selected[j] = not selected[j];
 
         // compute
         sln.reset();
-        merge_greedily(param, selected, sln);
+        merge_greedily(param, selected, next_ratio, sln);
 
         ll delta = sln.get_raw_score() - score;
         auto probability = [&]() {
-            double boltzmann = 0.05 / (1 + sqrt(highscore));
+            double boltzmann = 0.1 / (1 + sqrt(highscore));
             return exp(boltzmann * delta / temperature);
         };
         if (delta >= 0 or bernoulli_distribution(probability())(gen)) {
             // if (delta < 0) cerr << "iteration = " << iteration << ": delta = " << delta << endl;
             score += delta;
+            ratio = next_ratio;
         } else {
             // revert
-            selected[i] = not selected[i];
+            if (i != -1) selected[i] = not selected[i];
             if (j != -1) selected[j] = not selected[j];
         }
 
@@ -654,7 +672,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
                 if (highscore < sln.get_raw_score()) {
                     highscore = sln.get_raw_score();
                     answer = sln.answer;
-                    cerr << "iteration = " << iteration << " : highscore = " << highscore << endl;
+                    // cerr << "iteration = " << iteration << " : highscore = " << highscore << " / " << ratio << endl;
                 }
                 if (not p) {
                     sln.remove_unnecessary_edges();
