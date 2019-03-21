@@ -231,7 +231,7 @@ struct parameters {
                 for (int i : edges_of[b]) {
                     int c = opposite(b, edges[i]);
                     if (dist[a][c] + edges[i].m == dist[a][b]) {
-                        reconstruct[a][b] = c;
+                        reconstruct[a][b] = i;
                         break;
                     }
                 }
@@ -303,6 +303,7 @@ private:
     vector<int> m_completed;  // routes
     ll m_route_sum_p;
 
+public:
     vector<int> const & get_completed() {
         auto const & routes = param->routes;
         if (m_route_sum_p != -1) {
@@ -516,113 +517,118 @@ public:
     }
 };
 
-tuple<vector<int>, ll, double> find_nice_path_for_route(parameters const & param, solution & sln, route_t const & route) {
-    auto const & N = param.N;
-    auto const & edges = param.edges;
-    auto const & edges_of = param.edges_of;
-    auto & uft = sln.uft;
-
-    if (uft.is_same(route.a, route.b)) {
-        return make_tuple(vector<int>(), 0, - INFINITY);
-    }
-
-    // Dijkstra
-    vector<int> parent(N, -1);
-    vector<int> path_edge(N, -1);
-    vector<bool> fixed(N);
-    vector<ll> sum_p(N, LLONG_MIN);
-    vector<ll> sum_m(N, LLONG_MAX);
-    reversed_priority_queue<pair<ll, int> > que;
-    sum_p[route.a] = 0;
-    sum_m[route.a] = 0;
-    que.emplace(0, route.a);
-    while (not que.empty()) {
-        ll sum_m_a; int a; tie(sum_m_a, a) = que.top();
-        que.pop();
-        if (a == route.b) break;
-        if (sum_m[a] < sum_m_a) continue;
-
-        for (int i : edges_of[a]) {
-            int b = opposite(a, edges[i]);
-            ll sum_m_b = sum_m[a] + (uft.is_same(a, b) ? 0 : edges[i].m);
-            if (sum_m_b < sum_m[b]) {
-                sum_m[b] = sum_m_b;
-                sum_p[b] = sum_p[a] + (uft.is_same(a, b) ? 0 : edges[i].p);
-                parent[b] = (uft.is_same(a, b) ? parent[a] : a);
-                path_edge[b] = (uft.is_same(a, b) ? path_edge[a] : i);
-                que.emplace(sum_m_b, b);
-            }
-        }
-    }
-    assert (sum_m[route.b] != LLONG_MAX);
-
-    // reconstruct path
-    vector<int> path;
-    for (int b = route.b; path_edge[b] != -1; b = parent[b]) {
-        path.push_back(path_edge[b]);
-    }
-    reverse(ALL(path));
-
-    double value = (double)(sum_p[route.b] + route.p) / sum_m[route.b];
-
-    return make_tuple(path, sum_m[route.b], value);
-}
-
 template <class Generator>
 vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes, double clock_begin, Generator & gen) {
     parameters param(NM, N, E, edges, R, routes);
     vector<int> answer;
     ll highscore = 0;
 
-    solution cur(&param);
-
-    solution nxt(&param);
-    auto commit = [&]() {
-        nxt.reset();
-        for (int i : cur.answer) {
-            nxt.use(i);
+    auto commit = [&](solution & sln) {
+        vector<int> preserved = sln.answer;
+        sln.remove_unnecessary_edges();
+        sln.add_edges_greedily();
+        if (highscore < sln.get_raw_score()) {
+            highscore = sln.get_raw_score();
+            answer = sln.answer;
+            cerr << "highscore = " << highscore << endl;
         }
-        nxt.remove_unnecessary_edges();
-        nxt.add_edges_greedily();
-        if (highscore < nxt.get_raw_score()) {
-            highscore = nxt.get_raw_score();
-            answer = nxt.answer;
+        sln.reset();
+        for (int i : preserved) {
+            sln.use(i);
         }
     };
 
-    while (true) {
-        vector<int> selected_path;
-        double selected_value = - INFINITY;
+    vector<bool> selected(R);
+    REP (i, R) {
+        selected[i] = bernoulli_distribution(0.5)(gen);
+    }
 
-        for (auto const & route : routes) {
-            vector<int> path; ll sum_m; double value;
-            tie(path, sum_m, value) = find_nice_path_for_route(param, cur, route);
-
-            if (cur.sum_m + sum_m > NM) {
-                continue;
-            }
-            if (selected_value < value) {
-                selected_value = value;
-                selected_path = path;
-            }
-        }
-
-        if (not selected_path.empty()) {
-            cerr << "use path:";
-            for (int i : selected_path) {
-                cerr << " " << i;
-                assert (not cur.uft.is_same(edges[i].a, edges[i].b));
-                cur.use(i);
-            }
-            cerr << endl;
-        } else {
+    double temperature = 1;
+    for (unsigned iteration = 0; ; ++ iteration) {
+        temperature = 1.0 - (rdtsc() - clock_begin) / (TLE * 0.8);
+        if (temperature <= 0.0) {
             break;
         }
 
-        commit();
-    }
+        solution sln(&param);
 
-    commit();
+        vector<vector<int> > supernodes;
+        REP (i, R) if (selected[i]) {
+            supernodes.emplace_back(1, routes[i].a);
+            supernodes.emplace_back(1, routes[i].b);
+        }
+        sort(ALL(supernodes));
+        supernodes.erase(unique(ALL(supernodes)), supernodes.end());
+
+        while (supernodes.size() >= 2) {
+            tuple<int, int, int, int> path;
+            ll sum_m = LLONG_MAX;
+
+            REP (i, supernodes.size()) {
+                REP (j, i) {
+                    for (int a : supernodes[i]) {
+                        for (int b : supernodes[j]) {
+                            if (param.dist[a][b] < sum_m) {
+                                sum_m = param.dist[a][b];
+                                path = make_tuple(i, j, a, b);
+                            }
+                        }
+                    }
+                }
+            }
+            if (sum_m == LLONG_MAX or sln.sum_m + sum_m > NM) break;
+
+            int i, j, a, b; tie(i, j, a, b) = path;
+            if (supernodes[i].size() < supernodes[j].size()) {
+                swap(i, j);
+            }
+            while (b != a) {
+                int k = param.reconstruct[a][b];
+                sln.use(k);
+                b = opposite(b, edges[k]);
+                if (b != a) {
+                    supernodes[i].push_back(b);
+                }
+            }
+            copy(ALL(supernodes[j]), back_inserter(supernodes[i]));
+            supernodes[j].swap(supernodes.back());
+            supernodes.pop_back();
+
+            // commit(sln);
+        }
+
+        commit(sln);
+
+        vector<bool> completed(R);
+        for (int i : sln.get_completed()) {
+            completed[i] = true;
+        }
+        int unexpected = 0;
+        int failed = 0;
+        REP (i, R) {
+            unexpected += (not selected[i] and completed[i]);
+            failed += (selected[i] and not completed[i]);
+        }
+        if (failed) {
+            while (true) {
+                int i = uniform_int_distribution<int>(0, R - 1)(gen);
+                if (selected[i]) {
+                    selected[i] = false;
+                    break;
+                }
+            }
+        } else if (unexpected) {
+            selected.swap(completed);
+        } else {
+            while (true) {
+                int i = uniform_int_distribution<int>(0, R - 1)(gen);
+                if (not selected[i]) {
+                    selected[i] = true;
+                    break;
+                }
+            }
+        }
+    }
 
     cerr << "score: " << highscore << endl;
     return answer;
