@@ -167,7 +167,8 @@ struct parameters {
     vector<vector<int> > edges_of;
     vector<vector<int> > routes_of;
 
-    vector<vector<ll> > dist;
+    vector<vector<ll> > dist_p;
+    vector<vector<ll> > dist_m;
     vector<vector<int> > reconstruct;  // `reconstruct[a][b]` is the parent node of `b` on a shortest-path tree from `a`
 
     vector<array<int, 3> > triangles;
@@ -209,18 +210,26 @@ struct parameters {
 
 
         // Warshall-Floyd
-        dist.resize(N, vector<ll>(N, LLONG_MAX / 3));
+        constexpr ll INF = 1e9 + 7;
+        dist_p.resize(N, vector<ll>(N, -1));
+        dist_m.resize(N, vector<ll>(N, INF));
         REP (a, N) {
-            dist[a][a] = 0;
+            dist_p[a][a] = 0;
+            dist_m[a][a] = 0;
         }
         for (auto const & edge : edges) {
-            dist[edge.a][edge.b] = edge.m;
-            dist[edge.b][edge.a] = edge.m;
+            dist_p[edge.a][edge.b] = edge.p;
+            dist_m[edge.a][edge.b] = edge.m;
+            dist_p[edge.b][edge.a] = edge.p;
+            dist_m[edge.b][edge.a] = edge.m;
         }
         REP (c, N) {
-            REP (a, N) if (dist[c][a] != LLONG_MAX / 3) {
-                REP (b, N) {
-                    chmin(dist[a][b], dist[a][c] + dist[c][b]);
+            REP (a, N) if (dist_p[a][c] >= 0) {
+                REP (b, N) if (dist_p[c][b] >= 0) {
+                    if (dist_m[a][b] > dist_m[a][c] + dist_m[c][b]) {
+                        dist_m[a][b] = dist_m[a][c] + dist_m[c][b];
+                        dist_p[a][b] = dist_p[a][c] + dist_p[c][b];
+                    }
                 }
             }
         }
@@ -230,7 +239,7 @@ struct parameters {
             REP (b, N) if (b != a) {
                 for (int i : edges_of[b]) {
                     int c = opposite(b, edges[i]);
-                    if (dist[a][c] + edges[i].m == dist[a][b]) {
+                    if (dist_m[a][c] + edges[i].m == dist_m[a][b]) {
                         reconstruct[a][b] = i;
                         break;
                     }
@@ -517,114 +526,139 @@ public:
     }
 };
 
-template <class Generator>
-vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes, double clock_begin, Generator & gen) {
-    parameters param(NM, N, E, edges, R, routes);
-    vector<int> answer;
-    ll highscore = 0;
+void merge_greedily(parameters const & param, vector<bool> const & selected, solution & sln) {
+    auto const & NM = param.NM;
+    auto const & edges = param.edges;
+    auto const & R = param.R;
+    auto const & routes = param.routes;
+    assert (sln.answer.empty());
 
-    auto commit = [&](solution & sln) {
-        vector<int> preserved = sln.answer;
-        sln.remove_unnecessary_edges();
-        sln.add_edges_greedily();
-        if (highscore < sln.get_raw_score()) {
-            highscore = sln.get_raw_score();
-            answer = sln.answer;
-            cerr << "highscore = " << highscore << endl;
-        }
-        sln.reset();
-        for (int i : preserved) {
-            sln.use(i);
-        }
-    };
-
-    vector<bool> selected(R);
-    REP (i, R) {
-        selected[i] = bernoulli_distribution(0.5)(gen);
+    vector<vector<int> > supernodes;
+    REP (i, R) if (selected[i]) {
+        supernodes.emplace_back(1, routes[i].a);
+        supernodes.emplace_back(1, routes[i].b);
     }
+    sort(ALL(supernodes));
+    supernodes.erase(unique(ALL(supernodes)), supernodes.end());
 
-    double temperature = 1;
-    for (unsigned iteration = 0; ; ++ iteration) {
-        temperature = 1.0 - (rdtsc() - clock_begin) / (TLE * 0.8);
-        if (temperature <= 0.0) {
-            break;
-        }
+    while (supernodes.size() >= 2) {
+        tuple<int, int, int, int> path;
+        ll sum_m = LLONG_MAX;
 
-        solution sln(&param);
-
-        vector<vector<int> > supernodes;
-        REP (i, R) if (selected[i]) {
-            supernodes.emplace_back(1, routes[i].a);
-            supernodes.emplace_back(1, routes[i].b);
-        }
-        sort(ALL(supernodes));
-        supernodes.erase(unique(ALL(supernodes)), supernodes.end());
-
-        while (supernodes.size() >= 2) {
-            tuple<int, int, int, int> path;
-            ll sum_m = LLONG_MAX;
-
-            REP (i, supernodes.size()) {
-                REP (j, i) {
-                    for (int a : supernodes[i]) {
-                        for (int b : supernodes[j]) {
-                            if (param.dist[a][b] < sum_m) {
-                                sum_m = param.dist[a][b];
-                                path = make_tuple(i, j, a, b);
-                            }
+        REP (i, supernodes.size()) {
+            REP (j, i) {
+                for (int a : supernodes[i]) {
+                    for (int b : supernodes[j]) {
+                        if (param.dist_m[a][b] < sum_m) {
+                            sum_m = param.dist_m[a][b];
+                            path = make_tuple(i, j, a, b);
                         }
                     }
                 }
             }
-            if (sum_m == LLONG_MAX or sln.sum_m + sum_m > NM) break;
-
-            int i, j, a, b; tie(i, j, a, b) = path;
-            if (supernodes[i].size() < supernodes[j].size()) {
-                swap(i, j);
-            }
-            while (b != a) {
-                int k = param.reconstruct[a][b];
-                sln.use(k);
-                b = opposite(b, edges[k]);
-                if (b != a) {
-                    supernodes[i].push_back(b);
-                }
-            }
-            copy(ALL(supernodes[j]), back_inserter(supernodes[i]));
-            supernodes[j].swap(supernodes.back());
-            supernodes.pop_back();
-
-            // commit(sln);
         }
+        if (sum_m == LLONG_MAX or sln.sum_m + sum_m > NM) break;
 
-        commit(sln);
-
-        vector<bool> completed(R);
-        for (int i : sln.get_completed()) {
-            completed[i] = true;
+        int i, j, a, b; tie(i, j, a, b) = path;
+        if (supernodes[i].size() < supernodes[j].size()) {
+            swap(i, j);
         }
-        int unexpected = 0;
-        int failed = 0;
-        REP (i, R) {
-            unexpected += (not selected[i] and completed[i]);
-            failed += (selected[i] and not completed[i]);
-        }
-        if (failed) {
-            while (true) {
-                int i = uniform_int_distribution<int>(0, R - 1)(gen);
-                if (selected[i]) {
-                    selected[i] = false;
-                    break;
-                }
+        while (b != a) {
+            int k = param.reconstruct[a][b];
+            assert (k != -1);
+            sln.use(k);
+            b = opposite(b, edges[k]);
+            if (b != a) {
+                supernodes[i].push_back(b);
             }
-        } else if (unexpected) {
-            selected.swap(completed);
+        }
+        copy(ALL(supernodes[j]), back_inserter(supernodes[i]));
+        supernodes[j].swap(supernodes.back());
+        supernodes.pop_back();
+    }
+}
+
+template <class Generator>
+vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes, double clock_begin, Generator & gen) {
+    parameters param(NM, N, E, edges, R, routes);
+    solution sln(&param);
+    vector<int> answer;
+    ll highscore = -1;
+
+    vector<bool> selected(R);
+    {  // use initial state constructed by greedy
+        vector<int> order(R);
+        iota(ALL(order), 0);
+        sort(ALL(order), [&](int i, int j) {
+            ll p_i = param.dist_p[routes[i].a][routes[i].b];
+            ll m_i = param.dist_m[routes[i].a][routes[i].b];
+            ll p_j = param.dist_p[routes[j].a][routes[j].b];
+            ll m_j = param.dist_m[routes[j].a][routes[j].b];
+            return p_i * m_j > p_j * m_i;
+        });
+        order.resize(R / 2);
+        for (int i : order) {
+            selected[i] = true;
+        }
+    }
+    ll score = -1;
+    while (score == -1) {
+        sln.reset();
+        merge_greedily(param, selected, sln);
+        if (sln.get_completed().size() < count(ALL(selected), true)) {
+            REP (i, R) if (selected[i]) {
+                selected[i] = bernoulli_distribution(0.9)(gen);
+            }
         } else {
-            while (true) {
-                int i = uniform_int_distribution<int>(0, R - 1)(gen);
-                if (not selected[i]) {
-                    selected[i] = true;
-                    break;
+            score = sln.get_raw_score();
+            answer = sln.answer;
+            highscore = score;
+        }
+    }
+
+    double temperature = 1;
+    for (unsigned iteration = 0; ; ++ iteration) {
+        temperature = 1.0 - (rdtsc() - clock_begin) / (TLE * 0.9);
+        if (temperature <= 0.0) {
+            cerr << "iteration = " << iteration << " : done" << endl;
+            break;
+        }
+
+        // choose a neighborhood
+        int i = uniform_int_distribution<int>(0, R - 1)(gen);
+        int j = (selected[i] and bernoulli_distribution(0.8)(gen) ? uniform_int_distribution<int>(0, R - 1)(gen) : -1);
+        selected[i] = not selected[i];
+        if (j != -1) selected[j] = not selected[j];
+
+        // compute
+        sln.reset();
+        merge_greedily(param, selected, sln);
+
+        ll delta = sln.get_raw_score() - score;
+        auto probability = [&]() {
+            double boltzmann = 0.05 / (1 + sqrt(highscore));
+            return exp(boltzmann * delta / temperature);
+        };
+        if (delta >= 0 or bernoulli_distribution(probability())(gen)) {
+            // if (delta < 0) cerr << "iteration = " << iteration << ": delta = " << delta << endl;
+            score += delta;
+        } else {
+            // revert
+            selected[i] = not selected[i];
+            if (j != -1) selected[j] = not selected[j];
+        }
+
+        // update the answer
+        if (delta > 0) {
+            REP (p, 2) {
+                if (highscore < sln.get_raw_score()) {
+                    highscore = sln.get_raw_score();
+                    answer = sln.answer;
+                    cerr << "iteration = " << iteration << " : highscore = " << highscore << endl;
+                }
+                if (not p) {
+                    sln.remove_unnecessary_edges();
+                    sln.add_edges_greedily();
                 }
             }
         }
