@@ -167,7 +167,8 @@ struct parameters {
     vector<vector<int> > edges_of;
     vector<vector<int> > routes_of;
 
-    vector<vector<ll> > dist;
+    vector<vector<ll> > dist_p;
+    vector<vector<ll> > dist_m;
     vector<vector<int> > reconstruct;  // `reconstruct[a][b]` is the parent node of `b` on a shortest-path tree from `a`
 
     vector<array<int, 3> > triangles;
@@ -209,18 +210,26 @@ struct parameters {
 
 
         // Warshall-Floyd
-        dist.resize(N, vector<ll>(N, LLONG_MAX / 3));
+        constexpr ll INF = 1e9 + 7;
+        dist_p.resize(N, vector<ll>(N, -1));
+        dist_m.resize(N, vector<ll>(N, INF));
         REP (a, N) {
-            dist[a][a] = 0;
+            dist_p[a][a] = 0;
+            dist_m[a][a] = 0;
         }
         for (auto const & edge : edges) {
-            dist[edge.a][edge.b] = edge.m;
-            dist[edge.b][edge.a] = edge.m;
+            dist_p[edge.a][edge.b] = edge.p;
+            dist_m[edge.a][edge.b] = edge.m;
+            dist_p[edge.b][edge.a] = edge.p;
+            dist_m[edge.b][edge.a] = edge.m;
         }
         REP (c, N) {
-            REP (a, N) if (dist[c][a] != LLONG_MAX / 3) {
-                REP (b, N) {
-                    chmin(dist[a][b], dist[a][c] + dist[c][b]);
+            REP (a, N) if (dist_p[a][c] >= 0) {
+                REP (b, N) if (dist_p[c][b] >= 0) {
+                    if (dist_m[a][b] > dist_m[a][c] + dist_m[c][b]) {
+                        dist_m[a][b] = dist_m[a][c] + dist_m[c][b];
+                        dist_p[a][b] = dist_p[a][c] + dist_p[c][b];
+                    }
                 }
             }
         }
@@ -230,7 +239,7 @@ struct parameters {
             REP (b, N) if (b != a) {
                 for (int i : edges_of[b]) {
                     int c = opposite(b, edges[i]);
-                    if (dist[a][c] + edges[i].m == dist[a][b]) {
+                    if (dist_m[a][c] + edges[i].m == dist_m[a][b]) {
                         reconstruct[a][b] = i;
                         break;
                     }
@@ -562,21 +571,23 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
 
         while (supernodes.size() >= 2) {
             tuple<int, int, int, int> path;
-            ll sum_m = LLONG_MAX;
+            ll sum_p = -1;
+            ll sum_m = 1;
 
             REP (i, supernodes.size()) {
                 REP (j, i) {
                     for (int a : supernodes[i]) {
                         for (int b : supernodes[j]) {
-                            if (param.dist[a][b] < sum_m) {
-                                sum_m = param.dist[a][b];
+                            if (sum_p * param.dist_m[a][b] < param.dist_p[a][b] * sum_m) {
+                                sum_p = param.dist_p[a][b];
+                                sum_m = param.dist_m[a][b];
                                 path = make_tuple(i, j, a, b);
                             }
                         }
                     }
                 }
             }
-            if (sum_m == LLONG_MAX or sln.sum_m + sum_m > NM) break;
+            if (sum_p < 0 or sln.sum_m + sum_m > NM) break;
 
             int i, j, a, b; tie(i, j, a, b) = path;
             if (supernodes[i].size() < supernodes[j].size()) {
@@ -584,6 +595,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
             }
             while (b != a) {
                 int k = param.reconstruct[a][b];
+                assert (k != -1);
                 sln.use(k);
                 b = opposite(b, edges[k]);
                 if (b != a) {
