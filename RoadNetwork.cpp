@@ -524,6 +524,108 @@ public:
         }
         return succeeded;
     }
+
+    void rotate_small_cycles() {
+        auto const & N = param->N;
+        auto const & E = param->E;
+        auto const & edges = param->edges;
+        auto const & triangles = param->triangles;
+        auto const & triangles_of = param->triangles_of;
+        auto const & quadrangles = param->quadrangles;
+        auto const & quadrangles_of = param->quadrangles_of;
+
+        queue<int> que;
+        for (int i : answer) {
+            que.push(i);
+        }
+        vector<int> flipped;
+        while (not que.empty()) {
+            int i = que.front(); que.pop();
+            if (not used[i]) continue;
+
+            pair<int, int> found = make_pair(-1, -1);
+            ll delta_p = 1;
+            ll delta_m = 0;
+
+            for (int k : triangles_of[i]) {
+                auto const & triangle = triangles[k];
+                int cnt = 0;
+                cnt += used[triangle[0]];
+                cnt += used[triangle[1]];
+                cnt += used[triangle[2]];
+                if (cnt == 2) {
+                    for (int added : triangle) if (not used[added]) {
+                        for (int removed : triangle) if (used[removed]) {
+                            ll p = edges[added].p - edges[removed].p;
+                            ll m = edges[added].m - edges[removed].m;
+                            if (delta_p <= p and m <= delta_m) {
+                                delta_p = p;
+                                delta_m = m;
+                                found = make_pair(added, removed);
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (int k : quadrangles_of[i]) {
+                auto const & quadrangle = quadrangles[k];
+                int cnt = 0;
+                cnt += used[quadrangle[0]];
+                cnt += used[quadrangle[1]];
+                cnt += used[quadrangle[2]];
+                cnt += used[quadrangle[3]];
+                if (cnt == 3) {
+                    for (int added : quadrangle) if (not used[added]) {
+                        for (int removed : quadrangle) if (used[removed]) {
+                            ll p = edges[added].p - edges[removed].p;
+                            ll m = edges[added].m - edges[removed].m;
+                            if (delta_p <= p and m <= delta_m) {
+                                delta_p = p;
+                                delta_m = m;
+                                found = make_pair(added, removed);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (found.first != -1) {
+                int added, removed; tie(added, removed) = found;
+                assert (not used[added]);
+                assert (used[removed]);
+                used[added] = false;
+                used[removed] = true;
+                flipped.push_back(added);
+                flipped.push_back(removed);
+                que.push(added);
+            }
+        }
+
+        // save the result
+        vector<int> updated_answer;
+        for (int i : answer) {
+            if (used[i]) {
+                updated_answer.push_back(i);
+            }
+        }
+        for (int i : flipped) {
+            if (used[i]) {
+                updated_answer.push_back(i);
+            }
+        }
+
+        // reconstruct
+        for (int i : flipped) {
+            used[i] = not used[i];
+        }
+
+        // update
+        reset();
+        for (int i : updated_answer) {
+            use(i);
+        }
+    }
 };
 
 void merge_greedily(parameters const & param, vector<bool> const & selected, double ratio, solution & sln) {
@@ -675,6 +777,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
                     // cerr << "iteration = " << iteration << " : highscore = " << highscore << " / " << ratio << endl;
                 }
                 if (not p) {
+                    sln.rotate_small_cycles();
                     sln.remove_unnecessary_edges();
                     sln.add_edges_greedily();
                 }
