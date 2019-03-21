@@ -177,7 +177,7 @@ struct parameters {
 
     parameters(ll NM_, int N_, int E_, vector<connection_t> const & edges_, int R_, vector<route_t> const & routes_)
             : NM(NM_), N(N_), E(E_), edges(edges_), R(R_), routes(routes_) {
-        vector<int> greedy_order(E);
+        greedy_order.resize(E);
         iota(ALL(greedy_order), 0);
         sort(ALL(greedy_order), [&](int i, int j) {
             return edges[i].p * edges[j].m > edges[j].p * edges[i].m;
