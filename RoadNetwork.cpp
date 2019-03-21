@@ -509,7 +509,6 @@ public:
         auto const & NM = param->NM;
         auto const & edges = param->edges;
         int succeeded = 0;
-        int failed = 0;
         for (int i : param->greedy_order) {
             if (sum_m == NM) break;
             if (sum_m + edges[i].m <= NM) {
@@ -517,9 +516,6 @@ public:
                     ++ succeeded;
                     use(i);
                 }
-            } else {
-                ++ failed;
-                if (failed >= 10) break;
             }
         }
         return succeeded;
@@ -585,105 +581,39 @@ template <class Generator>
 vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes, double clock_begin, Generator & gen) {
     parameters param(NM, N, E, edges, R, routes);
     solution sln(&param);
-    vector<int> answer;
-    ll highscore = -1;
 
     vector<bool> selected(R);
-    {  // use initial state constructed by greedy
-        vector<int> order(R);
-        iota(ALL(order), 0);
-        sort(ALL(order), [&](int i, int j) {
-            ll p_i = param.dist_p[routes[i].a][routes[i].b];
-            ll m_i = param.dist_m[routes[i].a][routes[i].b];
-            ll p_j = param.dist_p[routes[j].a][routes[j].b];
-            ll m_j = param.dist_m[routes[j].a][routes[j].b];
-            return p_i * m_j > p_j * m_i;
-        });
-        order.resize(R / 2);
-        for (int i : order) {
+    ll score = -1;
+    while (true) {
+        int add = -1;
+        REP (i, R) if (not selected[i]) {
+            selected[i] = true;
+            sln.reset();
+            merge_greedily(param, selected, 0.01, sln);
+            sln.remove_unnecessary_edges();
+            sln.add_edges_greedily();
+            if (score < sln.get_raw_score()) {
+                score = sln.get_raw_score();
+                add = i;
+            }
+            selected[i] = false;
+        }
+        if (add == -1) {
+            break;
+        }
+        selected[add] = true;
+        sln.reset();
+        merge_greedily(param, selected, 0.01, sln);
+        for (int i : sln.get_completed()) {
             selected[i] = true;
         }
     }
-    double ratio = 0.05;
-    ll score = -1;
-    while (score == -1) {
-        sln.reset();
-        merge_greedily(param, selected, ratio, sln);
-        if (sln.get_completed().size() < count(ALL(selected), true)) {
-            REP (i, R) if (selected[i]) {
-                selected[i] = bernoulli_distribution(0.9)(gen);
-            }
-        } else {
-            score = sln.get_raw_score();
-            answer = sln.answer;
-            highscore = score;
-        }
-    }
 
-    double temperature = 1;
-    for (unsigned iteration = 0; ; ++ iteration) {
-        temperature = 1.0 - (rdtsc() - clock_begin) / (TLE * 0.95);
-        if (temperature <= 0.0) {
-            cerr << "iteration = " << iteration << " : done" << endl;
-            break;
-        }
-
-        // choose a neighborhood
-        int i = -1;
-        int j = -1;
-        double next_ratio = ratio;
-        if (bernoulli_distribution(0.95)(gen)) {
-            i = uniform_int_distribution<int>(0, R - 1)(gen);
-            if (selected[i] and bernoulli_distribution(0.8)(gen)) {
-                int j1 = uniform_int_distribution<int>(0, R - 1)(gen);
-                j = j1;
-                while (j < R and selected[j]) ++ j;
-                if (j == R) j = 0;
-                while (j < j1 and selected[j]) ++ j;
-            }
-        } else {
-            next_ratio *= uniform_real_distribution<double>(0.8, 1.2)(gen);
-        }
-        if (i != -1) selected[i] = not selected[i];
-        if (j != -1) selected[j] = not selected[j];
-
-        // compute
-        sln.reset();
-        merge_greedily(param, selected, next_ratio, sln);
-
-        ll delta = sln.get_raw_score() - score;
-        auto probability = [&]() {
-            double boltzmann = 0.1 / (1 + sqrt(highscore));
-            return exp(boltzmann * delta / temperature);
-        };
-        if (delta >= 0 or bernoulli_distribution(probability())(gen)) {
-            // if (delta < 0) cerr << "iteration = " << iteration << ": delta = " << delta << endl;
-            score += delta;
-            ratio = next_ratio;
-        } else {
-            // revert
-            if (i != -1) selected[i] = not selected[i];
-            if (j != -1) selected[j] = not selected[j];
-        }
-
-        // update the answer
-        if (delta > 0) {
-            REP (p, 2) {
-                if (highscore < sln.get_raw_score()) {
-                    highscore = sln.get_raw_score();
-                    answer = sln.answer;
-                    // cerr << "iteration = " << iteration << " : highscore = " << highscore << " / " << ratio << endl;
-                }
-                if (not p) {
-                    sln.remove_unnecessary_edges();
-                    sln.add_edges_greedily();
-                }
-            }
-        }
-    }
-
-    cerr << "score: " << highscore << endl;
-    return answer;
+    sln.reset();
+    merge_greedily(param, selected, 0.01, sln);
+    sln.remove_unnecessary_edges();
+    sln.add_edges_greedily();
+    return sln.answer;
 }
 
 
