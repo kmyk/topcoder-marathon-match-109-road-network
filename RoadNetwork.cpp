@@ -574,64 +574,55 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
     vector<int> answer;
     ll highscore = 0;
 
-    vector<int> cur;  // routes
-    vector<int> incompleted_routes(R);
-    iota(ALL(incompleted_routes), 0);
-    ll score = 0;
+    solution cur(&param);
 
-    double temperature = 1;
-    for (unsigned iteration = 0; ; ++ iteration) {
-        if (iteration % 32 == 0) {
-            temperature = 1.0 - (rdtsc() - clock_begin) / (TLE * 0.8);
-            if (temperature <= 0.0) {
-                cerr << "iteration = " << iteration << ": done" << endl;
-                break;
+    solution nxt(&param);
+    auto commit = [&]() {
+        nxt.reset();
+        for (int i : cur.answer) {
+            nxt.use(i);
+        }
+        nxt.remove_unnecessary_edges();
+        nxt.add_edges_greedily();
+        if (highscore < nxt.get_raw_score()) {
+            highscore = nxt.get_raw_score();
+            answer = nxt.answer;
+        }
+    };
+
+    while (true) {
+        vector<int> selected_path;
+        double selected_value = - INFINITY;
+
+        for (auto const & route : routes) {
+            vector<int> path; ll sum_m; double value;
+            tie(path, sum_m, value) = find_nice_path_for_route(param, cur, route);
+
+            if (cur.sum_m + sum_m > NM) {
+                continue;
+            }
+            if (selected_value < value) {
+                selected_value = value;
+                selected_path = path;
             }
         }
 
-        double p = uniform_real_distribution<double>()(gen);
-        vector<int> nxt_relaxed;
-        if (p < 0.3) {
-            nxt_relaxed = cur;
-            shuffle(ALL(nxt_relaxed), gen);
+        if (not selected_path.empty()) {
+            cerr << "use path:";
+            for (int i : selected_path) {
+                cerr << " " << i;
+                assert (not cur.uft.is_same(edges[i].a, edges[i].b));
+                cur.use(i);
+            }
+            cerr << endl;
         } else {
-            int i = choose(incompleted_routes, gen);
-            int j = uniform_int_distribution<int>(0, cur.size())(gen);
-            copy(cur.begin(), cur.begin() + j, back_inserter(nxt_relaxed));
-            nxt_relaxed.push_back(i);
-            copy(cur.begin() + j, cur.end(), back_inserter(nxt_relaxed));
+            break;
         }
 
-        solution sln(&param);
-        vector<int> nxt;
-        for (int i : nxt_relaxed) {
-            vector<int> path; ll sum_m;
-            tie(path, sum_m, ignore) = find_nice_path_for_route(param, sln, routes[i]);
-            nxt.push_back(i);
-            if (sln.sum_m + sum_m <= NM) {
-                for (int j : path) {
-                    sln.use(j);
-                }
-            }
-        }
-        sln.add_edges_greedily();
-
-        ll delta = sln.get_raw_score() - score;
-        auto probability = [&]() {
-            double boltzmann = 3.0 / sqrt(1 + highscore);
-            return exp(boltzmann * delta / temperature);
-        };
-        if (delta >= 0 or bernoulli_distribution(probability())(gen)) {
-            if (delta < 0) cerr << "iteration = " << iteration << ": delta = " << delta << endl;
-            cur.swap(nxt);
-            score = sln.get_raw_score();
-            if (highscore < score) {
-                highscore = score;
-                answer = sln.answer;
-                cerr << "iteration = " << iteration << ": highscore = " << highscore << endl;
-            }
-        }
+        commit();
     }
+
+    commit();
 
     cerr << "score: " << highscore << endl;
     return answer;
