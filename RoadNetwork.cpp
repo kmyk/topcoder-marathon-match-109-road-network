@@ -660,6 +660,10 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
             // if (delta < 0) cerr << "iteration = " << iteration << ": delta = " << delta << endl;
             score += delta;
             ratio = next_ratio;
+            fill(ALL(selected), false);
+            for (int i : sln.get_completed()) {
+                selected[i] = true;
+            }
         } else {
             // revert
             if (i != -1) selected[i] = not selected[i];
