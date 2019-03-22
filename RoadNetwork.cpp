@@ -650,6 +650,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
         // compute
         sln.reset();
         merge_greedily(param, selected, next_ratio, sln);
+        sln.add_edges_greedily();
 
         ll delta = sln.get_raw_score() - score;
         auto probability = [&]() {
