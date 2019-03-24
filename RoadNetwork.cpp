@@ -92,6 +92,7 @@ struct union_find_tree {
 };
 
 
+constexpr ll INF = 1e9 + 7;
 constexpr int MIN_N = 30;
 constexpr int MAX_N = 1000;
 
@@ -217,7 +218,6 @@ struct parameters {
 
 
         // Warshall-Floyd
-        constexpr ll INF = 1e9 + 7;
         dist_p.resize(N, vector<ll>(N, -1));
         dist_m.resize(N, vector<ll>(N, INF));
         dist_f.resize(N, vector<ll>(N, INF));
@@ -542,6 +542,7 @@ public:
 
 void merge_greedily(parameters const & param, vector<bool> const & selected, solution & sln) {
     auto const & NM = param.NM;
+    auto const & N = param.N;
     auto const & edges = param.edges;
     auto const & R = param.R;
     auto const & routes = param.routes;
@@ -555,43 +556,103 @@ void merge_greedily(parameters const & param, vector<bool> const & selected, sol
     sort(ALL(supernodes));
     supernodes.erase(unique(ALL(supernodes)), supernodes.end());
 
-    constexpr ll INF = 1e9 + 7;
-    while (supernodes.size() >= 2) {
-        tuple<int, int, int, int> path;
-        ll sum_f = INF;
-        ll sum_m = INF;
+    vector<bool> supernode_exist(N, true);
+    vector<int> supernode_of(N, -1);
+    REP (i, supernodes.size()) {
+        supernode_of[supernodes[i].front()] = i;
+    }
 
-        REP (i, supernodes.size()) {
-            REP (j, i) {
-                for (int a : supernodes[i]) {
-                    for (int b : supernodes[j]) {
-                        if (param.dist_f[a][b] < sum_f) {
-                            sum_f = param.dist_f[a][b];
-                            sum_m = param.dist_m[a][b];
-                            path = make_tuple(i, j, a, b);
-                        }
+    vector<vector<ll> > dist(supernodes.size(), vector<ll>(supernodes.size(), INF));
+    vector<vector<pair<int, int> > > link(supernodes.size(), vector<pair<int, int> >(supernodes.size(), make_pair(-1, -1)));
+    REP (i, supernodes.size()) {
+        dist[i][i] = 0;
+    }
+    REP (i, supernodes.size()) {
+        REP (j, i) {
+            for (int a : supernodes[i]) {
+                for (int b : supernodes[j]) {
+                    if (param.dist_f[a][b] < dist[i][j]) {
+                        dist[i][j] = param.dist_f[a][b];
+                        link[i][j] = make_pair(a, b);
                     }
                 }
             }
+            dist[j][i] = dist[i][j];
+            link[j][i] = link[i][j];
         }
-        if (sln.sum_m + sum_m > NM) break;
+    }
 
-        int i, j, a, b; tie(i, j, a, b) = path;
-        if (supernodes[i].size() < supernodes[j].size()) {
-            swap(i, j);
+    constexpr ll INF = 1e9 + 7;
+    while (true) {
+        pair<int, int> super_path;
+        ll max_f = INF;
+        REP (i, supernodes.size()) if (supernode_exist[i]) {
+            REP (j, i) if (supernode_exist[j]) {
+                if (dist[i][j] < max_f) {
+                    max_f = dist[i][j];
+                    super_path = make_pair(i, j);
+                }
+            }
         }
+        if (max_f == INF) break;
+
+        int i, j; tie(i, j) = super_path;
+        int a, b; tie(a, b) = link[i][j];
+
+        vector<int> path;
+        ll sum_m = 0;
         while (b != a) {
             int k = param.reconstruct[a][b];
             assert (k != -1);
-            sln.use(k);
+            path.push_back(k);
+            sum_m += edges[k].m;
             b = opposite(b, edges[k]);
-            if (b != a) {
-                supernodes[i].push_back(b);
+        }
+        if (sln.sum_m + sum_m > NM) return;
+
+        vector<int> connected;
+        for (int k : path) {
+            sln.use(k);
+            for (int a : { edges[k].a, edges[k].b }) {
+                if (supernode_of[a] != -1 and not count(ALL(connected), supernode_of[a])) {
+                    connected.push_back(supernode_of[a]);
+                }
             }
         }
-        copy(ALL(supernodes[j]), back_inserter(supernodes[i]));
-        supernodes[j].swap(supernodes.back());
-        supernodes.pop_back();
+        sort(ALL(connected), [&](int i, int j) {
+            return supernodes[i].size() > supernodes[j].size();
+        });
+        i = connected.front();
+        while (connected.size() >= 2) {
+            int j = connected.back();
+            connected.pop_back();
+
+            REP (k, supernodes.size()) if (i != k and j != k and supernode_exist[k]) {
+                if (dist[j][k] < dist[i][k]) {
+                    dist[i][k] = dist[k][i] = dist[j][k];
+                    link[i][k] = link[k][i] = link[j][k];
+                }
+            }
+            for (int a : supernodes[j]) {
+                supernode_of[a] = i;
+            }
+            copy(ALL(supernodes[j]), back_inserter(supernodes[i]));
+            supernode_exist[j] = false;
+        }
+        for (int k : path) {
+            for (int a : { edges[k].a, edges[k].b }) if (supernode_of[a] == -1) {
+                REP (j, supernodes.size()) if (i != j and supernode_exist[j]) {
+                    for (int b : supernodes[j]) {
+                        if (param.dist_f[a][b] < dist[i][j]) {
+                            dist[i][j] = dist[j][i] = param.dist_f[a][b];
+                            link[i][j] = link[j][i] = make_pair(a, b);
+                        }
+                    }
+                }
+                supernodes[i].push_back(a);
+                supernode_of[a] = i;
+            }
+        }
     }
 }
 
@@ -661,7 +722,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
 
         ll delta = sln.get_raw_score() - score;
         auto probability = [&]() {
-            double boltzmann = 0.1 / (1 + sqrt(highscore));
+            double boltzmann = 0.3 / (1 + sqrt(highscore));
             return exp(boltzmann * delta / temperature);
         };
         if (delta >= 0 or bernoulli_distribution(probability())(gen)) {
