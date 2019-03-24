@@ -169,6 +169,7 @@ struct parameters {
 
     vector<vector<ll> > dist_p;
     vector<vector<ll> > dist_m;
+    vector<vector<ll> > dist_f;
     vector<vector<int> > reconstruct;  // `reconstruct[a][b]` is the parent node of `b` on a shortest-path tree from `a`
 
     vector<array<int, 3> > triangles;
@@ -213,22 +214,32 @@ struct parameters {
         constexpr ll INF = 1e9 + 7;
         dist_p.resize(N, vector<ll>(N, -1));
         dist_m.resize(N, vector<ll>(N, INF));
+        dist_f.resize(N, vector<ll>(N, INF));
         REP (a, N) {
             dist_p[a][a] = 0;
             dist_m[a][a] = 0;
+            dist_f[a][a] = 0;
         }
+        auto get_f = [&](connection_t const & edge) {
+            int r = edge.p / edge.m;
+            const int table[5] = { 7, 5, 3, 2, 2 };
+            return table[r - 1] * edge.m;
+        };
         for (auto const & edge : edges) {
             dist_p[edge.a][edge.b] = edge.p;
             dist_m[edge.a][edge.b] = edge.m;
+            dist_f[edge.a][edge.b] = get_f(edge);
             dist_p[edge.b][edge.a] = edge.p;
             dist_m[edge.b][edge.a] = edge.m;
+            dist_f[edge.b][edge.a] = get_f(edge);
         }
         REP (c, N) {
-            REP (a, N) if (dist_p[a][c] >= 0) {
-                REP (b, N) if (dist_p[c][b] >= 0) {
-                    if (dist_m[a][b] > dist_m[a][c] + dist_m[c][b]) {
+            REP (a, N) if (dist_f[a][c] < INF) {
+                REP (b, N) if (dist_f[c][b] < INF) {
+                    if (dist_f[a][b] > dist_f[a][c] + dist_f[c][b]) {
                         dist_m[a][b] = dist_m[a][c] + dist_m[c][b];
                         dist_p[a][b] = dist_p[a][c] + dist_p[c][b];
+                        dist_f[a][b] = dist_f[a][c] + dist_f[c][b];
                     }
                 }
             }
@@ -239,7 +250,9 @@ struct parameters {
             REP (b, N) if (b != a) {
                 for (int i : edges_of[b]) {
                     int c = opposite(b, edges[i]);
-                    if (dist_m[a][c] + edges[i].m == dist_m[a][b]) {
+                    if (dist_f[a][c] + get_f(edges[i]) == dist_f[a][b]
+                            and dist_m[a][c] + edges[i].m == dist_m[a][b]
+                            and dist_p[a][c] + edges[i].p == dist_p[a][b]) {
                         reconstruct[a][b] = i;
                         break;
                     }
@@ -685,6 +698,15 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
                 }
             }
         }
+    }
+
+    int count_r[5] = {};
+    for (int i : answer) {
+        int r = edges[i].p / edges[i].m;
+        ++ count_r[r - 1];
+    }
+    REP (r, 5) {
+        cerr << "P / M = " << r + 1 << ": " << count_r[r] << endl;
     }
 
     cerr << "score: " << highscore << endl;
