@@ -540,12 +540,14 @@ public:
     }
 };
 
-void merge_greedily(parameters const & param, vector<bool> const & selected, solution & sln) {
+template <class Generator>
+void merge_greedily(parameters const & param, vector<bool> const & selected, solution & sln, Generator & gen) {
     auto const & NM = param.NM;
     auto const & N = param.N;
     auto const & edges = param.edges;
     auto const & R = param.R;
     auto const & routes = param.routes;
+    auto const & edges_of = param.edges_of;
     assert (sln.answer.empty());
 
     vector<vector<int> > supernodes;
@@ -603,6 +605,12 @@ void merge_greedily(parameters const & param, vector<bool> const & selected, sol
         ll sum_m = 0;
         while (b != a) {
             int k = param.reconstruct[a][b];
+            for (int k1 : edges_of[b]) {
+                int c = opposite(b, edges[k1]);
+                if (param.dist_f[a][c] < param.dist_f[a][b] and bernoulli_distribution(0.1)(gen)) {
+                    k = k1;
+                }
+            }
             assert (k != -1);
             path.push_back(k);
             sum_m += edges[k].m;
@@ -682,7 +690,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
     ll score = -1;
     while (score == -1) {
         sln.reset();
-        merge_greedily(param, selected, sln);
+        merge_greedily(param, selected, sln, gen);
         if (sln.get_completed().size() < count(ALL(selected), true)) {
             REP (i, R) if (selected[i]) {
                 selected[i] = bernoulli_distribution(0.9)(gen);
@@ -717,7 +725,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
 
         // compute
         sln.reset();
-        merge_greedily(param, selected, sln);
+        merge_greedily(param, selected, sln, gen);
         sln.add_edges_greedily();
 
         ll delta = sln.get_raw_score() - score;
