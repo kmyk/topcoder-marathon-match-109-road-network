@@ -540,7 +540,7 @@ public:
     }
 };
 
-void merge_greedily(parameters const & param, vector<bool> const & selected, solution & sln) {
+void merge_greedily(parameters const & param, vector<bool> const & selected, vector<bool> const & forbidden, solution & sln) {
     auto const & NM = param.NM;
     auto const & N = param.N;
     auto const & edges = param.edges;
@@ -603,9 +603,21 @@ void merge_greedily(parameters const & param, vector<bool> const & selected, sol
         ll sum_m = 0;
         while (b != a) {
             int k = param.reconstruct[a][b];
+            if (forbidden[k]) {
+                ll sum_f = param.dist_f[a][b];
+                for (int k1 : param.edges_of[b]) {
+                    int c = opposite(b, edges[k1]);
+                    if (param.dist_f[a][c] <= sum_f and not count(ALL(path), k1)) {
+                        sum_f = param.dist_f[a][c];
+                        k = k1;
+                    }
+                }
+            }
             assert (k != -1);
             path.push_back(k);
-            sum_m += edges[k].m;
+            if (not sln.used[k]) {
+                sum_m += edges[k].m;
+            }
             b = opposite(b, edges[k]);
         }
         if (sln.sum_m + sum_m > NM) return;
@@ -682,7 +694,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
     ll score = -1;
     while (score == -1) {
         sln.reset();
-        merge_greedily(param, selected, sln);
+        merge_greedily(param, selected, vector<bool>(E), sln);
         if (sln.get_completed().size() < count(ALL(selected), true)) {
             REP (i, R) if (selected[i]) {
                 selected[i] = bernoulli_distribution(0.9)(gen);
@@ -694,6 +706,9 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
         }
     }
 
+    vector<bool> forbidden(E);
+    vector<int> forbidden_edges;
+
     double temperature = 1;
     for (unsigned iteration = 0; ; ++ iteration) {
         temperature = 1.0 - (rdtsc() - clock_begin) / (TLE * 0.95);
@@ -703,21 +718,38 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
         }
 
         // choose a neighborhood
-        int i = uniform_int_distribution<int>(0, R - 1)(gen);
+        int i = -1;
         int j = -1;
-        if (selected[i] and bernoulli_distribution(0.8)(gen)) {
-            int j1 = uniform_int_distribution<int>(0, R - 1)(gen);
-            j = j1;
-            while (j < R and selected[j]) ++ j;
-            if (j == R) j = 0;
-            while (j < j1 and selected[j]) ++ j;
+        int forbidden_i = -1;
+        if (iteration < 10000 or bernoulli_distribution(0.95)(gen)) {
+            i = uniform_int_distribution<int>(0, R - 1)(gen);
+            if (selected[i] and bernoulli_distribution(0.8)(gen)) {
+                int j1 = uniform_int_distribution<int>(0, R - 1)(gen);
+                j = j1;
+                while (j < R and selected[j]) ++ j;
+                if (j == R) j = 0;
+                while (j < j1 and selected[j]) ++ j;
+            }
+            if (i != -1) selected[i] = not selected[i];
+            if (j != -1) selected[j] = not selected[j];
+        } else {
+            if (not forbidden_edges.empty() and (forbidden_edges.size() >= 3 or bernoulli_distribution(0.1)(gen))) {
+                int k = uniform_int_distribution<int>(0, forbidden_edges.size() - 1)(gen);
+                swap(forbidden_edges[k], forbidden_edges.back());
+                forbidden_i = forbidden_edges.back();
+                forbidden_edges.pop_back();
+                forbidden[forbidden_i] = false;
+            } else {
+                forbidden_i = uniform_int_distribution<int>(0, E - 1)(gen);
+                if (forbidden[forbidden_i] or not sln.answer[forbidden_i]) continue;
+                forbidden_edges.push_back(forbidden_i);
+                forbidden[forbidden_i] = true;
+            }
         }
-        if (i != -1) selected[i] = not selected[i];
-        if (j != -1) selected[j] = not selected[j];
 
         // compute
         sln.reset();
-        merge_greedily(param, selected, sln);
+        merge_greedily(param, selected, forbidden, sln);
         sln.add_edges_greedily();
 
         ll delta = sln.get_raw_score() - score;
@@ -736,6 +768,15 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
             // revert
             if (i != -1) selected[i] = not selected[i];
             if (j != -1) selected[j] = not selected[j];
+            if (forbidden_i != -1) {
+                if (forbidden[forbidden_i]) {
+                    assert (forbidden_edges.back() == forbidden_i);
+                    forbidden_edges.pop_back();
+                } else {
+                    forbidden_edges.push_back(forbidden_i);
+                }
+                forbidden[forbidden_i] = not forbidden[forbidden_i];
+            }
         }
 
         // update the answer
@@ -744,7 +785,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
                 if (highscore < sln.get_raw_score()) {
                     highscore = sln.get_raw_score();
                     answer = sln.answer;
-                    // cerr << "iteration = " << iteration << " : highscore = " << highscore << " / " << endl;
+                    // cerr << "iteration = " << iteration << " : highscore = " << highscore << " / forbidden_edges.size() = " << forbidden_edges.size() << endl;
                 }
                 if (not p) {
                     sln.remove_unnecessary_edges();
