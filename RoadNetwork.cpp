@@ -598,7 +598,7 @@ void merge_greedily(parameters const & param, all_pairs_shortest_path const & di
 template <class Generator>
 vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes, double clock_begin, Generator & gen) {
     parameters param(NM, N, E, edges, R, routes);
-    const int dist_table[5] = { 7, 5, 3, 2, 2 };
+    const int dist_table[5] = { 6, 5, 4, 3, 3 };
     all_pairs_shortest_path dist(param, [&](connection_t const & edge) {
         int r = edge.p / edge.m;
         return dist_table[r - 1] * edge.m;
