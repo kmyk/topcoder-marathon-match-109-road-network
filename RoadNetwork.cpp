@@ -123,43 +123,6 @@ typename Container::value_type const & choose(Container const & a, Generator & g
     return a[i];
 }
 
-vector<array<int, 3> > list_triangles(int E, vector<connection_t> const & edges, vector<vector<int> > const & edges_of) {
-    vector<array<int, 3> > triangles;
-    REP (i, E) {
-        for (int j : edges_of[edges[i].a]) if (i < j) {
-            int c1 = opposite(edges[i].a, edges[j]);
-            for (int k : edges_of[edges[i].b]) if (j < k) {
-                int c2 = opposite(edges[i].b, edges[k]);
-                if (c1 == c2) {
-                    triangles.push_back({ i, j, k });
-                }
-            }
-        }
-    }
-    return triangles;
-}
-
-vector<array<int, 4> > list_quadrangles(int E, vector<connection_t> const & edges, vector<vector<int> > const & edges_of) {
-    vector<array<int, 4> > quadrangles;
-    REP (i, E) {
-        int a = edges[i].a;
-        int b = edges[i].b;
-        for (int j : edges_of[b]) if (i < j) {
-            int c = opposite(b, edges[j]);
-            for (int k : edges_of[c]) if (i < k and j < k) {
-                int d1 = opposite(c, edges[k]);
-                for (int l : edges_of[a]) if (i < l and l != j and l != k) {
-                    int d2 = opposite(a, edges[l]);
-                    if (d1 == d2) {
-                        quadrangles.push_back({ i, j, k, l });
-                    }
-                }
-            }
-        }
-    }
-    return quadrangles;
-}
-
 
 struct parameters {
     ll NM;
@@ -178,11 +141,6 @@ struct parameters {
     vector<vector<ll> > dist_m;
     vector<vector<ll> > dist_f;
     vector<vector<int> > reconstruct;  // `reconstruct[a][b]` is the parent node of `b` on a shortest-path tree from `a`
-
-    vector<array<int, 3> > triangles;
-    vector<array<int, 4> > quadrangles;
-    vector<vector<int> > triangles_of;
-    vector<vector<int> > quadrangles_of;
 
     parameters(ll NM_, int N_, int E_, vector<connection_t> const & edges_, int R_, vector<route_t> const & routes_)
             : NM(NM_), N(N_), E(E_), edges(edges_), R(R_), routes(routes_) {
@@ -259,23 +217,6 @@ struct parameters {
                     }
                 }
             }
-        }
-
-        triangles = list_triangles(E, edges, edges_of);
-        triangles_of.resize(E);
-        REP (i, triangles.size()) {
-            triangles_of[triangles[i][0]].push_back(i);
-            triangles_of[triangles[i][1]].push_back(i);
-            triangles_of[triangles[i][2]].push_back(i);
-        }
-
-        quadrangles = list_quadrangles(E, edges, edges_of);
-        quadrangles_of.resize(E);
-        REP (i, quadrangles.size()) {
-            quadrangles_of[quadrangles[i][0]].push_back(i);
-            quadrangles_of[quadrangles[i][1]].push_back(i);
-            quadrangles_of[quadrangles[i][2]].push_back(i);
-            quadrangles_of[quadrangles[i][3]].push_back(i);
         }
     }
 };
