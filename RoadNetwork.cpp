@@ -278,14 +278,6 @@ struct parameters {
             quadrangles_of[quadrangles[i][3]].push_back(i);
         }
     }
-
-    int find_edge(int a, int b) {
-        if (a > b) swap(a, b);
-        assert (not edges_of[a].empty());
-        int j = edges_of[a].size() - 1;
-        while (j >= 0 and (a != edges[edges_of[a][j]].a or b != edges[edges_of[a][j]].b)) -- j;
-        return edges_of[a][j];
-    }
 };
 
 /**
