@@ -106,12 +106,6 @@ struct route_t {
     ll p;
 };
 
-ll get_f(connection_t const & edge) {
-    int r = edge.p / edge.m;
-    const int table[5] = { 7, 5, 3, 2, 2 };
-    return table[r - 1] * edge.m;
-}
-
 int opposite(int a, connection_t const & edge) {
     return a ^ edge.a ^ edge.b;
 }
@@ -173,32 +167,44 @@ struct parameters {
             routes_of[routes[i].a].push_back(i);
             routes_of[routes[i].b].push_back(i);
         }
+    }
+};
 
+struct all_pairs_shortest_path {
+    vector<vector<ll> > p;
+    vector<vector<ll> > m;
+    vector<vector<ll> > f;
+    vector<vector<int> > reconstruct;  // `reconstruct[a][b]` is the parent node of `b` on a shortest-path tree from `a`
 
-        // Warshall-Floyd
-        dist_p.resize(N, vector<ll>(N, -1));
-        dist_m.resize(N, vector<ll>(N, INF));
-        dist_f.resize(N, vector<ll>(N, INF));
+    template <class Func>
+    all_pairs_shortest_path(parameters const & param, Func func) {
+        auto const & N = param.N;
+        auto const & edges = param.edges;
+        auto const & edges_of = param.edges_of;
+
+        p.resize(N, vector<ll>(N, -1));
+        m.resize(N, vector<ll>(N, INF));
+        f.resize(N, vector<ll>(N, INF));
         REP (a, N) {
-            dist_p[a][a] = 0;
-            dist_m[a][a] = 0;
-            dist_f[a][a] = 0;
+            p[a][a] = 0;
+            m[a][a] = 0;
+            f[a][a] = 0;
         }
         for (auto const & edge : edges) {
-            dist_p[edge.a][edge.b] = edge.p;
-            dist_m[edge.a][edge.b] = edge.m;
-            dist_f[edge.a][edge.b] = get_f(edge);
-            dist_p[edge.b][edge.a] = edge.p;
-            dist_m[edge.b][edge.a] = edge.m;
-            dist_f[edge.b][edge.a] = get_f(edge);
+            p[edge.a][edge.b] = edge.p;
+            m[edge.a][edge.b] = edge.m;
+            f[edge.a][edge.b] = func(edge);
+            p[edge.b][edge.a] = edge.p;
+            m[edge.b][edge.a] = edge.m;
+            f[edge.b][edge.a] = func(edge);
         }
         REP (c, N) {
-            REP (a, N) if (dist_f[a][c] < INF) {
-                REP (b, N) if (dist_f[c][b] < INF) {
-                    if (dist_f[a][b] > dist_f[a][c] + dist_f[c][b]) {
-                        dist_m[a][b] = dist_m[a][c] + dist_m[c][b];
-                        dist_p[a][b] = dist_p[a][c] + dist_p[c][b];
-                        dist_f[a][b] = dist_f[a][c] + dist_f[c][b];
+            REP (a, N) if (f[a][c] < INF) {
+                REP (b, N) if (f[c][b] < INF) {
+                    if (f[a][b] > f[a][c] + f[c][b]) {
+                        m[a][b] = m[a][c] + m[c][b];
+                        p[a][b] = p[a][c] + p[c][b];
+                        f[a][b] = f[a][c] + f[c][b];
                     }
                 }
             }
@@ -209,9 +215,9 @@ struct parameters {
             REP (b, N) if (b != a) {
                 for (int i : edges_of[b]) {
                     int c = opposite(b, edges[i]);
-                    if (dist_f[a][c] + get_f(edges[i]) == dist_f[a][b]
-                            and dist_m[a][c] + edges[i].m == dist_m[a][b]
-                            and dist_p[a][c] + edges[i].p == dist_p[a][b]) {
+                    if (f[a][c] + func(edges[i]) == f[a][b]
+                            and m[a][c] + edges[i].m == m[a][b]
+                            and p[a][c] + edges[i].p == p[a][b]) {
                         reconstruct[a][b] = i;
                         break;
                     }
@@ -473,7 +479,7 @@ public:
     }
 };
 
-void merge_greedily(parameters const & param, vector<bool> const & selected, solution & sln) {
+void merge_greedily(parameters const & param, all_pairs_shortest_path const & dist, vector<bool> const & selected, solution & sln) {
     auto const & NM = param.NM;
     auto const & N = param.N;
     auto const & edges = param.edges;
@@ -495,22 +501,22 @@ void merge_greedily(parameters const & param, vector<bool> const & selected, sol
         supernode_of[supernodes[i].front()] = i;
     }
 
-    vector<vector<ll> > dist(supernodes.size(), vector<ll>(supernodes.size(), INF));
+    vector<vector<ll> > cost(supernodes.size(), vector<ll>(supernodes.size(), INF));
     vector<vector<pair<int, int> > > link(supernodes.size(), vector<pair<int, int> >(supernodes.size(), make_pair(-1, -1)));
     REP (i, supernodes.size()) {
-        dist[i][i] = 0;
+        cost[i][i] = 0;
     }
     REP (i, supernodes.size()) {
         REP (j, i) {
             for (int a : supernodes[i]) {
                 for (int b : supernodes[j]) {
-                    if (param.dist_f[a][b] < dist[i][j]) {
-                        dist[i][j] = param.dist_f[a][b];
+                    if (dist.f[a][b] < cost[i][j]) {
+                        cost[i][j] = dist.f[a][b];
                         link[i][j] = make_pair(a, b);
                     }
                 }
             }
-            dist[j][i] = dist[i][j];
+            cost[j][i] = cost[i][j];
             link[j][i] = link[i][j];
         }
     }
@@ -521,8 +527,8 @@ void merge_greedily(parameters const & param, vector<bool> const & selected, sol
         ll max_f = INF;
         REP (i, supernodes.size()) if (supernode_exist[i]) {
             REP (j, i) if (supernode_exist[j]) {
-                if (dist[i][j] < max_f) {
-                    max_f = dist[i][j];
+                if (cost[i][j] < max_f) {
+                    max_f = cost[i][j];
                     super_path = make_pair(i, j);
                 }
             }
@@ -535,7 +541,7 @@ void merge_greedily(parameters const & param, vector<bool> const & selected, sol
         vector<int> path;
         ll sum_m = 0;
         while (b != a) {
-            int k = param.reconstruct[a][b];
+            int k = dist.reconstruct[a][b];
             assert (k != -1);
             path.push_back(k);
             sum_m += edges[k].m;
@@ -561,8 +567,8 @@ void merge_greedily(parameters const & param, vector<bool> const & selected, sol
             connected.pop_back();
 
             REP (k, supernodes.size()) if (i != k and j != k and supernode_exist[k]) {
-                if (dist[j][k] < dist[i][k]) {
-                    dist[i][k] = dist[k][i] = dist[j][k];
+                if (cost[j][k] < cost[i][k]) {
+                    cost[i][k] = cost[k][i] = cost[j][k];
                     link[i][k] = link[k][i] = link[j][k];
                 }
             }
@@ -576,8 +582,8 @@ void merge_greedily(parameters const & param, vector<bool> const & selected, sol
             for (int a : { edges[k].a, edges[k].b }) if (supernode_of[a] == -1) {
                 REP (j, supernodes.size()) if (i != j and supernode_exist[j]) {
                     for (int b : supernodes[j]) {
-                        if (param.dist_f[a][b] < dist[i][j]) {
-                            dist[i][j] = dist[j][i] = param.dist_f[a][b];
+                        if (dist.f[a][b] < cost[i][j]) {
+                            cost[i][j] = cost[j][i] = dist.f[a][b];
                             link[i][j] = link[j][i] = make_pair(a, b);
                         }
                     }
@@ -592,6 +598,11 @@ void merge_greedily(parameters const & param, vector<bool> const & selected, sol
 template <class Generator>
 vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes, double clock_begin, Generator & gen) {
     parameters param(NM, N, E, edges, R, routes);
+    const int dist_table[5] = { 7, 5, 3, 2, 2 };
+    all_pairs_shortest_path dist(param, [&](connection_t const & edge) {
+        int r = edge.p / edge.m;
+        return dist_table[r - 1] * edge.m;
+    });
     solution sln(&param);
     vector<int> answer;
     ll highscore = -1;
@@ -601,10 +612,10 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
         vector<int> order(R);
         iota(ALL(order), 0);
         sort(ALL(order), [&](int i, int j) {
-            ll p_i = param.dist_p[routes[i].a][routes[i].b];
-            ll m_i = param.dist_m[routes[i].a][routes[i].b];
-            ll p_j = param.dist_p[routes[j].a][routes[j].b];
-            ll m_j = param.dist_m[routes[j].a][routes[j].b];
+            ll p_i = dist.p[routes[i].a][routes[i].b];
+            ll m_i = dist.m[routes[i].a][routes[i].b];
+            ll p_j = dist.p[routes[j].a][routes[j].b];
+            ll m_j = dist.m[routes[j].a][routes[j].b];
             return p_i * m_j > p_j * m_i;
         });
         order.resize(R / 2);
@@ -615,7 +626,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
     ll score = -1;
     while (score == -1) {
         sln.reset();
-        merge_greedily(param, selected, sln);
+        merge_greedily(param, dist, selected, sln);
         if (sln.get_completed().size() < count(ALL(selected), true)) {
             REP (i, R) if (selected[i]) {
                 selected[i] = bernoulli_distribution(0.9)(gen);
@@ -653,7 +664,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
 
         // compute
         sln.reset();
-        merge_greedily(param, selected, sln);
+        merge_greedily(param, dist, selected, sln);
         sln.add_edges_greedily();
 
         ll delta = sln.get_raw_score() - score;
