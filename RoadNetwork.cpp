@@ -740,16 +740,12 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
 
         // update the answer
         if (delta > 0) {
-            REP (p, 2) {
-                if (highscore < sln.get_raw_score()) {
-                    highscore = sln.get_raw_score();
-                    answer = sln.answer;
-                    // cerr << "iteration = " << iteration << " : highscore = " << highscore << " / " << endl;
-                }
-                if (not p) {
-                    sln.remove_unnecessary_edges();
-                    sln.add_edges_greedily();
-                }
+            sln.remove_unnecessary_edges();
+            sln.add_edges_greedily();
+            if (highscore < sln.get_raw_score()) {
+                highscore = sln.get_raw_score();
+                answer = sln.answer;
+                // cerr << "iteration = " << iteration << " : highscore = " << highscore << " / " << endl;
             }
         }
     }
