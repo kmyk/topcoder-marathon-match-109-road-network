@@ -652,6 +652,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
         // choose a neighborhood
         int i = uniform_int_distribution<int>(0, R - 1)(gen);
         int j = -1;
+        int k = -1;
         if (selected[i] and bernoulli_distribution(0.8)(gen)) {
             int j1 = uniform_int_distribution<int>(0, R - 1)(gen);
             j = j1;
@@ -659,8 +660,12 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
             if (j == R) j = 0;
             while (j < j1 and selected[j]) ++ j;
         }
+        if (iteration >= 50000 and bernoulli_distribution(0.8)(gen)) {
+            k = uniform_int_distribution<int>(0, R - 1)(gen);
+        }
         if (i != -1) selected[i] = not selected[i];
         if (j != -1) selected[j] = not selected[j];
+        if (k != -1) selected[k] = not selected[k];
 
         // compute
         sln.reset();
@@ -683,6 +688,7 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
             // revert
             if (i != -1) selected[i] = not selected[i];
             if (j != -1) selected[j] = not selected[j];
+            if (k != -1) selected[k] = not selected[k];
         }
 
         // update the answer
