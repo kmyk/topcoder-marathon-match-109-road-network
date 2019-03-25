@@ -595,51 +595,72 @@ void merge_greedily(parameters const & param, all_pairs_shortest_path const & di
     }
 }
 
+vector<bool> make_initial_selected(parameters const & param, all_pairs_shortest_path const & dist, solution & sln) {
+    auto const & NM = param.NM;
+    auto const & N = param.N;
+    auto const & edges = param.edges;
+    auto const & R = param.R;
+    auto const & routes = param.routes;
+    assert (sln.answer.empty());
+
+    auto get_completed = [&](vector<bool> const & selected) {
+        sln.reset();
+        merge_greedily(param, dist, selected, sln);
+        vector<bool> completed(R);
+        for (int i : sln.get_completed()) {
+            completed[i] = true;
+        }
+        return completed;
+    };
+
+    vector<int> order(R);
+    iota(ALL(order), 0);
+    sort(ALL(order), [&](int i, int j) {
+        ll m_i = dist.m[routes[i].a][routes[i].b];
+        ll m_j = dist.m[routes[j].a][routes[j].b];
+        return m_i < m_j;
+    });
+    auto get_greedy_selected = [&](int size) {
+        vector<bool> selected(R);
+        REP (i, size) {
+            selected[order[i]] = true;
+        }
+        return selected;
+    };
+
+    int size = 0;
+    REP_R (k, 30) {
+        int next_size = size | (1 << k);
+        if (next_size <= R) {
+            auto completed = get_completed(get_greedy_selected(next_size));
+            if (count(ALL(completed), true) >= next_size) {
+                size = next_size;
+            }
+        }
+    }
+    return get_completed(get_greedy_selected(size));
+}
+
 template <class Generator>
 vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edges, int R, vector<route_t> const & routes, double clock_begin, Generator & gen) {
     parameters param(NM, N, E, edges, R, routes);
-    const int dist_table[5] = { 6, 5, 4, 3, 3 };
+
     all_pairs_shortest_path dist(param, [&](connection_t const & edge) {
+        const int dist_table[5] = { 6, 5, 4, 3, 3 };
         int r = edge.p / edge.m;
         return dist_table[r - 1] * edge.m;
     });
-    solution sln(&param);
-    vector<int> answer;
-    ll highscore = -1;
 
-    vector<bool> selected(R);
-    {  // use initial state constructed by greedy
-        vector<int> order(R);
-        iota(ALL(order), 0);
-        sort(ALL(order), [&](int i, int j) {
-            ll p_i = dist.p[routes[i].a][routes[i].b];
-            ll m_i = dist.m[routes[i].a][routes[i].b];
-            ll p_j = dist.p[routes[j].a][routes[j].b];
-            ll m_j = dist.m[routes[j].a][routes[j].b];
-            return p_i * m_j > p_j * m_i;
-        });
-        order.resize(R / 2);
-        for (int i : order) {
-            selected[i] = true;
-        }
-    }
-    ll score = -1;
-    while (score == -1) {
-        sln.reset();
-        merge_greedily(param, dist, selected, sln);
-        if (sln.get_completed().size() < count(ALL(selected), true)) {
-            REP (i, R) if (selected[i]) {
-                selected[i] = bernoulli_distribution(0.9)(gen);
-            }
-        } else {
-            for (int i : sln.get_completed()) {
-                selected[i] = true;
-            }
-            score = sln.get_raw_score();
-            answer = sln.answer;
-            highscore = score;
-        }
-    }
+    solution sln(&param);
+    vector<bool> selected = make_initial_selected(param, dist, sln);
+    sln.reset();
+    merge_greedily(param, dist, selected, sln);
+    ll score = sln.get_raw_score();
+
+    vector<int> answer = sln.answer;
+    ll highscore = score;
+    cerr << "initial completed routes: " << count(ALL(selected), true) << " / " << R << endl;
+    cerr << "initial score: " << highscore << endl;
 
     double temperature = 1;
     for (unsigned iteration = 0; ; ++ iteration) {
