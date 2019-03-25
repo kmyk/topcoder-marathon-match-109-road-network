@@ -680,6 +680,9 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
                 selected[i] = bernoulli_distribution(0.9)(gen);
             }
         } else {
+            for (int i : sln.get_completed()) {
+                selected[i] = true;
+            }
             score = sln.get_raw_score();
             answer = sln.answer;
             highscore = score;
