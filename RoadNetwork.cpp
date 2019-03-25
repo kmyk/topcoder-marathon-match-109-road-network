@@ -670,10 +670,10 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
         dist = all_pairs_shortest_path(param, [&](connection_t const & edge) {
             return edge.m;
         });
-    } else if (sln.get_completed().size() > 0.4 * R) {
+    } else if (sln.get_completed().size() > 0.8 * R) {
         updated = true;
         array<int, 5> dist_table;
-        if (sln.get_completed().size() < 0.8 * R) {
+        if (sln.get_completed().size() < 0.9 * R) {
             dist_table = { 7, 5, 3, 3, 2 };
         } else {
             dist_table = { 18, 12, 7, 3, 2 };
