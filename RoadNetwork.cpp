@@ -655,6 +655,8 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
     vector<bool> selected = make_initial_selected(param, dist, sln);
     sln.reset();
     merge_greedily(param, dist, selected, sln);
+    sln.remove_unnecessary_edges();
+    sln.add_edges_greedily();
     ll score = sln.get_raw_score();
 
     vector<int> answer = sln.answer;
@@ -662,7 +664,14 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
     cerr << "initial completed routes: " << count(ALL(selected), true) << " / " << R << endl;
     cerr << "initial score: " << highscore << endl;
 
-    if (sln.get_completed().size() > 0.4 * R) {
+    bool updated = false;
+    if (sln.get_completed().size() == 0) {
+        updated = true;
+        dist = all_pairs_shortest_path(param, [&](connection_t const & edge) {
+            return edge.m;
+        });
+    } else if (sln.get_completed().size() > 0.4 * R) {
+        updated = true;
         array<int, 5> dist_table;
         if (sln.get_completed().size() < 0.8 * R) {
             dist_table = { 7, 5, 3, 3, 2 };
@@ -673,11 +682,14 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
             int r = edge.p / edge.m;
             return dist_table[r - 1] * edge.m;
         });
-
+    }
+    if (updated) {
         sln.reset();
         vector<bool> selected = make_initial_selected(param, dist, sln);
         sln.reset();
         merge_greedily(param, dist, selected, sln);
+        sln.remove_unnecessary_edges();
+        sln.add_edges_greedily();
         score = sln.get_raw_score();
 
         if (highscore < score) {
