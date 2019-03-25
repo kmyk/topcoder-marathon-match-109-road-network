@@ -662,6 +662,32 @@ vector<int> find_solution(ll NM, int N, int E, vector<connection_t> const & edge
     cerr << "initial completed routes: " << count(ALL(selected), true) << " / " << R << endl;
     cerr << "initial score: " << highscore << endl;
 
+    if (sln.get_completed().size() > 0.4 * R) {
+        array<int, 5> dist_table;
+        if (sln.get_completed().size() < 0.8 * R) {
+            dist_table = { 7, 5, 3, 3, 2 };
+        } else {
+            dist_table = { 18, 12, 7, 3, 2 };
+        }
+        dist = all_pairs_shortest_path(param, [&](connection_t const & edge) {
+            int r = edge.p / edge.m;
+            return dist_table[r - 1] * edge.m;
+        });
+
+        sln.reset();
+        vector<bool> selected = make_initial_selected(param, dist, sln);
+        sln.reset();
+        merge_greedily(param, dist, selected, sln);
+        score = sln.get_raw_score();
+
+        if (highscore < score) {
+            highscore = score;
+            answer = sln.answer;
+        }
+        cerr << "updated initial completed routes: " << count(ALL(selected), true) << " / " << R << endl;
+        cerr << "updated initial score: " << highscore << endl;
+    }
+
     double temperature = 1;
     for (unsigned iteration = 0; ; ++ iteration) {
         temperature = 1.0 - (rdtsc() - clock_begin) / (TLE * 0.95);
