@@ -2,6 +2,46 @@
 
 <https://community.topcoder.com/longcontest/?module=ViewProblemStatement&rd=17427&compid=81910>
 
+Provisional 11th place, 952192.54 points
+
+## Algorithm
+
+I used simulated annealing about sets of routes to complete. For each fixed set of routes, I use edges greedily like Prim's algorithm, and Warshall-Floyd algorithm as the preprocessing.
+
+In preprocessing, I used f(P / M) * M with a monotonically decreasing f as costs of edges, instead of just M. In this problem, almost edges have M = 1 in large test cases, so this is effective in such cases.
+I used a set of routes as a state of SA. To make neighborhoods, I did: 1. add or remove some routes from the current set, 2. run Prim's algorithm, and 3. choose the set of completed routes after (2.) as a neighborhood. The (3.) is important to carry "why the neighborhood was good" to the next neighborhoods.
+
+## Example scores:
+
+-   0) 2184.0
+-   1) 1099293.0
+-   2) 2461712.0
+-   3) 10270.0
+-   4) 278684.0
+-   5) 36456.0
+-   6) 765.0
+-   7) 25086.0
+-   8) 28290.0
+-   9) 33792.0
+
+<details>
+<summary>images</summary>
+
+![](https://github.com/kmyk/topcoder-marathon-match-109-road-network/blob/ba46b7ecdcf0ca25f807d6c28f719f29fc76634c/images/63f4355e48ce374b5021fdf1b9b9629402bd6d78.1.png)
+![](https://github.com/kmyk/topcoder-marathon-match-109-road-network/blob/ba46b7ecdcf0ca25f807d6c28f719f29fc76634c/images/63f4355e48ce374b5021fdf1b9b9629402bd6d78.2.png)
+![](https://github.com/kmyk/topcoder-marathon-match-109-road-network/blob/ba46b7ecdcf0ca25f807d6c28f719f29fc76634c/images/63f4355e48ce374b5021fdf1b9b9629402bd6d78.3.png)
+![](https://github.com/kmyk/topcoder-marathon-match-109-road-network/blob/ba46b7ecdcf0ca25f807d6c28f719f29fc76634c/images/63f4355e48ce374b5021fdf1b9b9629402bd6d78.4.png)
+![](https://github.com/kmyk/topcoder-marathon-match-109-road-network/blob/ba46b7ecdcf0ca25f807d6c28f719f29fc76634c/images/63f4355e48ce374b5021fdf1b9b9629402bd6d78.5.png)
+![](https://github.com/kmyk/topcoder-marathon-match-109-road-network/blob/ba46b7ecdcf0ca25f807d6c28f719f29fc76634c/images/63f4355e48ce374b5021fdf1b9b9629402bd6d78.6.png)
+![](https://github.com/kmyk/topcoder-marathon-match-109-road-network/blob/ba46b7ecdcf0ca25f807d6c28f719f29fc76634c/images/63f4355e48ce374b5021fdf1b9b9629402bd6d78.7.png)
+![](https://github.com/kmyk/topcoder-marathon-match-109-road-network/blob/ba46b7ecdcf0ca25f807d6c28f719f29fc76634c/images/63f4355e48ce374b5021fdf1b9b9629402bd6d78.8.png)
+![](https://github.com/kmyk/topcoder-marathon-match-109-road-network/blob/ba46b7ecdcf0ca25f807d6c28f719f29fc76634c/images/63f4355e48ce374b5021fdf1b9b9629402bd6d78.9.png)
+![](https://github.com/kmyk/topcoder-marathon-match-109-road-network/blob/ba46b7ecdcf0ca25f807d6c28f719f29fc76634c/images/63f4355e48ce374b5021fdf1b9b9629402bd6d78.10.png)
+
+</details>
+
+---
+
 ## 問題
 
 制約が増えた Steiner 最小森問題。
@@ -1561,6 +1601,18 @@ Score = 33792.0
 
 </details>
 
+### 2019/03/26 13:00
+
+終了時刻を 1 日勘違いしていた。
+そういえば延長があった気がする。
+2019/03/26 10:00 JST までだと思ってたけど 2019/03/27 09:20 JST までだったらしい。
+
+小さいケースはルートでなく辺での焼きなましをするといいのかなという気分になってきた。
+やるべき？
+
+### 2019/03/26 13:50
+
+小さいケースでルートでなく辺での焼きなましは、勾配が見えないので難しいぽい。
 
 ## まとめ (終了前)
 
@@ -1573,6 +1625,9 @@ Score = 33792.0
 ### 要点
 
 -   問題はSteiner森問題を面倒にしたものになってる
+-   単純にやると空間がなめらかにならない
+    -   使う辺を管理するとだめ。使うルートを管理するとよい
+    -   意図せず達成されたルートの情報を捨ててしまうとだめ
 -   入力の生成が雑なので、大きいケースと小さいケースで性質が異なる
     -   特に、大きいケースではほぼ常に M = 1
 
@@ -1580,3 +1635,43 @@ Score = 33792.0
 
 -   何も分からなかったという気持ち。時間で殴って多少はましな順位には乗せれたことだけが救い
 -   問題の性質が入力の生成方法に大きく依存しており、しかしその生成方法が問題文に記載されていない。これは通常の競プロの問題としてはあまり適切ではないように感じる
+
+## まとめ
+
+### リンク
+
+-   [Post your approach](https://apps.topcoder.com/forums/?module=Thread&threadID=933700&start=0)
+-   <https://twitter.com/hakomof/lists/mm109>
+-   <https://togetter.com/li/1330831>
+-   [MM109参加記 - gasin’s blog](http://gasin.hatenadiary.jp/entry/2019/03/27/152729)
+-   <details>
+    <summary>EvbCFfp1XB さん</summary>
+
+    [TopCoder Marathon Match 109 : RoadNetwork : EvbCFfp1XB](http://spvyxgfbtewiazrl.doorblog.jp/archives/53174367.html)
+
+    <blockquote class="twitter-tweet" data-lang="ja"><p lang="ja" dir="ltr">TopCoder Marathon Match 109 : RoadNetwork はこんな感じ。<a href="https://t.co/kDyXSBKnZv">https://t.co/kDyXSBKnZv</a> <a href="https://t.co/V56uQydiDg">pic.twitter.com/V56uQydiDg</a></p>&mdash; EvbCFfp1XB (@EvbCFfp1XB) <a href="https://twitter.com/EvbCFfp1XB/status/1110849820221034497?ref_src=twsrc%5Etfw">2019年3月27日</a></blockquote>
+
+    </details>
+
+-   <details>
+    <summary>yowa さんのツイート</summary>
+
+    <blockquote class="twitter-tweet" data-lang="ja"><p lang="ja" dir="ltr">マラソン MM 109 おつかれさまでした。<br>やったこと: 2工程。<br>(前半) ルートの集合を選んで、それらのルートの端点だけからなる仮想的なグラフ(端点間のコスト=元グラフの最短路のコスト)を考え、最小全域木を構築する（余ったコストはコスパのいい辺を追加）。このMST+αを仮スコアとする</p>&mdash; yowa (@yowa) <a href="https://twitter.com/yowa/status/1110870495736389633?ref_src=twsrc%5Etfw">2019年3月27日</a></blockquote>
+    <blockquote class="twitter-tweet" data-lang="ja"><p lang="ja" dir="ltr">(後半)仮スコアの良かったヤツから時間の許す限り以下を行う。<br>+αを取り除いた後「辺を1つ取り除いて、改善する path があればそれ置き換える」を貪欲に行う。ここで改善とは point - 5*cost が高い path のこと（もちろん合計 cost が許容値超えない範囲で）</p>&mdash; yowa (@yowa) <a href="https://twitter.com/yowa/status/1110872840549494784?ref_src=twsrc%5Etfw">2019年3月27日</a></blockquote>
+    <blockquote class="twitter-tweet" data-lang="ja"><p lang="ja" dir="ltr">テストケースの生成方法的に考えて、<br>NMが小→総当たりに近いことができる（易）<br>NMが中→ルート選択の組み合わせが爆発（難）<br>NMが大→全routeをつなげられる（易）<br>みたいな感じだったことだなあ</p>&mdash; yowa (@yowa) <a href="https://twitter.com/yowa/status/1110878144179785729?ref_src=twsrc%5Etfw">2019年3月27日</a></blockquote>
+
+    </details>
+
+-   ebicochineal さん: <https://github.com/ebicochineal/marathon_match/tree/master/topcoder_marathon_match/RoadNetwork>
+
+### 他の人の解法への反応
+
+<blockquote class="twitter-tweet" data-lang="ja"><p lang="ja" dir="ltr">Steiner森問題はNP困難らしいと聞いて厳密解はまったく考えなかったけど、もしかしてフロンティア法ぽくナップサックなDPをすれば厳密解出せた？</p>&mdash; うさぎ (@a3VtYQo) <a href="https://twitter.com/a3VtYQo/status/1110805078615580672?ref_src=twsrc%5Etfw">2019年3月27日</a></blockquote>
+
+<blockquote class="twitter-tweet" data-lang="ja"><p lang="ja" dir="ltr">ルートの使用順序を焼きなますのたぶんはずれだけどまったく思いついてなかったので反省したい</p>&mdash; うさぎ (@a3VtYQo) <a href="https://twitter.com/a3VtYQo/status/1110950317972054016?ref_src=twsrc%5Etfw">2019年3月27日</a></blockquote>
+
+<blockquote class="twitter-tweet" data-lang="ja"><p lang="ja" dir="ltr">visualizerのテストケース生成が遅いからキャッシュするという発想なかった たくさんテストを回すとき効きそう</p>&mdash; うさぎ (@a3VtYQo) <a href="https://twitter.com/a3VtYQo/status/1111221722533888001?ref_src=twsrc%5Etfw">2019年3月28日</a></blockquote>
+
+<blockquote class="twitter-tweet" data-lang="ja"><p lang="ja" dir="ltr">「問題自体は簡単だから何をしても解けるけど、ケースごとに性質が違うのですべてをカバーできるように丁寧にやる必要があった」とかだろうか</p>&mdash; うさぎ (@a3VtYQo) <a href="https://twitter.com/a3VtYQo/status/1111232431774822400?ref_src=twsrc%5Etfw">2019年3月28日</a></blockquote>
+
+<blockquote class="twitter-tweet" data-lang="ja"><p lang="ja" dir="ltr">木を作ってから不要な辺を切って森に戻してるけど、そういえばこの部分の実装が雑なまま</p>&mdash; うさぎ (@a3VtYQo) <a href="https://twitter.com/a3VtYQo/status/1111232895346053120?ref_src=twsrc%5Etfw">2019年3月28日</a></blockquote>
